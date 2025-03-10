@@ -1,8 +1,9 @@
-const express = require("express");
-const bodyParser = require("body-parser");
-const cors = require("cors");
-const fs = require("fs");
-const { exec } = require("child_process");
+import express from "express";
+import bodyParser from "body-parser";
+import cors from "cors";
+import fs from "fs";
+import { exec } from "child_process";
+
 
 const app = express();
 const PORT = 3000;
@@ -111,7 +112,7 @@ function processNgrokResponse(response) {
     }
 }
 
-const { spawn } = require("child_process");
+import { spawn } from "child_process";
 
 function runCommand(command, args, callback) {
     const process = spawn(command, args);
@@ -130,7 +131,7 @@ function pushToGitHub() {
 
     runCommand("git", ["add", "."], () => {
         runCommand("git", ["commit", "-m", "Auto update"], () => {
-            runCommand("git", ["push", `https://etiqotwf:${GITHUB_TOKEN}@github.com/etiqotwf/amer.git`, "main"], () => {
+            runCommand("git", ["push", `https://etiqotwf:${GITHUB_TOKEN}@github.com/etiqotwf/javaScriptCourse.git`, "main"], () => {
                 console.log("✅ All changes successfully pushed to GitHub!");
             });
         });

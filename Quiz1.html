@@ -79,8 +79,8 @@
 </head>
 <body>
     <div class="container" id="startScreen">
-        <h1>International British Institute - Tanta (ILC)</h1>
-        <h2>Computer Icdl Test</h2>
+        <h1>**Regional Training Sector, Ministry of Irrigation, Damanhour Branch**</h1>
+        <h2>Computer ـJavaScript Quiz</h2>
         <p>Enter Your Name: <input type="text" id="traineeName"></p>
         <p>Enter Your Phone Number: <input type="text" id="traineePhone"></p>
         <p>Enter Password: <input type="password" id="password"></p>
@@ -94,15 +94,16 @@
         <p id="timer">Time Remaining: 30:00</p>
         <div id="passage">
             <h3>Read the following passage carefully and answer the following questions:</h3>
-            <p>
-                <strong>The Evolution of Information Technology in Computers
+<p>
+    <strong>Introduction to Programming with JavaScript</strong><br>
+    Programming is the process of giving instructions to a computer to perform specific tasks. JavaScript is one of the most popular programming languages used today. It is widely used for web development, allowing developers to create interactive and dynamic websites.
 
-                </strong><br>
-                Young people leave their parents' homes at different ages in different parts of the world. In the United States, a lot of college students do not live at home. They often choose to go to college in different cities – away from their parents. At college, many live in university housing. After college, most people prefer to live in their own homes. They often live alone, but some people rent apartments with others. These people are called roommates.
-                <p> Information Technology (IT) has transformed the world of computers over the years. In the early days, computers were large and slow, used mainly for calculations. Over time, technology advanced, making computers smaller, faster, and more powerful. The rise of the internet changed how people communicate, work, and store data. Today, IT plays a key role in every field, from education to business. Cloud computing, artificial intelligence, and cybersecurity are shaping the future of IT, making computers smarter and more efficient than ever.
-                    As technology continues to evolve, IT is becoming more integrated into daily life. Mobile devices, smart homes, and automation have revolutionized the way people interact with computers. Businesses rely on IT for data management, cybersecurity, and digital marketing. With the development of machine learning and blockchain technology, the IT industry is constantly growing, creating new opportunities and challenges. The future of IT promises even more advancements, making the digital world faster, safer, and more innovative.
-                    
-                    </p>
+    To start programming in JavaScript, developers need the right tools. The most common setup includes a code editor like VS Code and a web browser. Writing a simple JavaScript program begins with a basic script, such as displaying "Hello, World!" on the screen.
+
+    JavaScript supports different data types, including numbers, strings, arrays, and objects. Variables store data, while constants hold fixed values. The language also includes basic operations like addition, subtraction, multiplication, and division, which help in performing calculations.
+
+    As beginners progress in learning JavaScript, they will explore advanced topics like functions, loops, and conditional statements. Mastering these concepts helps developers build complex applications and enhance their coding skills.
+</p>
                         </div>
         <div id="quiz"></div>
     </div>
@@ -122,60 +123,40 @@
         document.getElementById("date").innerText = new Date().toLocaleDateString("en-US");
     
         const trueFalseQuestions = [
-    { q: "Quantum computing is expected to replace classical computers in all fields within the next decade.", a: "false" },
-    { q: "Machine learning and artificial intelligence rely heavily on big data for improving accuracy.", a: "true" },
-    { q: "Blockchain technology is primarily used for securing online financial transactions.", a: "true" },
-    { q: "Cybersecurity threats are decreasing due to advancements in encryption and firewalls.", a: "false" },
-    { q: "Cloud computing eliminates the need for physical data centers in large enterprises.", a: "false" },
-    { q: "Edge computing improves processing speed by reducing dependence on centralized cloud servers.", a: "true" }
+
+ { q: "JavaScript is primarily used for backend development only.", a: "false" },
+
+{ q: "The 'console.log' function in JavaScript is used to display messages in the browser console.", a: "true" },
+
+{ q: "Variables in JavaScript can be declared using 'var', 'let', or 'const'.", a: "true" },
+
+{ q: "Strings, numbers, and arrays are all examples of JavaScript data types.", a: "true" },
+
+{ q: "JavaScript cannot perform mathematical operations like addition and subtraction.", a: "false" },
+
 ];
 
     
 const questions = [
-    { q: "Which function in Excel is used to find the highest value in a range?", a: "c", options: ["SUM", "AVERAGE", "MAX", "COUNT"] },
-    { q: "Which keyboard shortcut is used to paste content in Microsoft Word?", a: "b", options: ["Ctrl + X", "Ctrl + V", "Ctrl + P", "Ctrl + C"] },
-    { q: "Which file extension is associated with Microsoft PowerPoint presentations?", a: "a", options: [".pptx", ".xlsx", ".docx", ".mdb"] },
-    { q: "Which function in Excel is used to search for a value in the first column and return a corresponding value?", a: "c", options: ["INDEX", "MATCH", "VLOOKUP", "FIND"] },
-    { q: "Which feature in Excel is used to apply automatic formatting based on cell values?", a: "b", options: ["Data Validation", "Conditional Formatting", "Goal Seek", "Scenario Manager"] },
-    { q: "In Windows, which key combination is used to open Task Manager?", a: "c", options: ["Ctrl + Shift + Esc", "Alt + Tab", "Ctrl + Alt + Delete", "Win + R"] },
-    { q: "Which Excel feature allows you to apply different formatting based on cell values?", a: "d", options: ["Data Validation", "Sorting", "Pivot Table", "Conditional Formatting"] },
-    { q: "Which shortcut key is used to undo an action in Microsoft applications?", a: "a", options: ["Ctrl + Z", "Ctrl + Y", "Ctrl + U", "Ctrl + A"] },
-    { q: "Which software is primarily used for managing databases?", a: "b", options: ["Excel", "Access", "PowerPoint", "OneNote"] },
-    { q: "Which chart type is best for showing trends over time in Excel?", a: "a", options: ["Line Chart", "Pie Chart", "Bar Chart", "Scatter Plot"] },
-    { q: "Which command is used to insert a new slide in PowerPoint?", a: "d", options: ["Ctrl + S", "Ctrl + X", "Ctrl + M", "Ctrl + P"] },
-    { q: "Which Windows feature allows you to restore the system to a previous state?", a: "c", options: ["Task Scheduler", "File Explorer", "System Restore", "Device Manager"] },
-    { q: "In Excel, which symbol is used for absolute cell referencing?", a: "b", options: ["&", "$", "#", "*"] },
-    { q: "Which option in Word is used to check spelling and grammar?", a: "d", options: ["Page Layout", "Track Changes", "Review", "Spelling & Grammar"] },
-    { q: "Which keyboard shortcut is used to save a document?", a: "a", options: ["Ctrl + S", "Ctrl + N", "Ctrl + O", "Ctrl + Q"] },
-    { q: "Which feature in PowerPoint allows animations between slides?", a: "b", options: ["Animations", "Transitions", "Slide Show", "Design"] },
-    { q: "What is the default file format for Excel workbooks?", a: "c", options: [".pptx", ".docx", ".xlsx", ".pdf"] },
-    { q: "Which feature in Word is used to merge multiple letters with a data source?", a: "d", options: ["Page Layout", "Table of Contents", "References", "Mail Merge"] },
-    { q: "Which function in Excel is used to count non-empty cells?", a: "a", options: ["COUNTA", "COUNTBLANK", "COUNTIF", "COUNT"] },
-    { q: "Which shortcut is used to bold text in Word?", a: "b", options: ["Ctrl + I", "Ctrl + B", "Ctrl + U", "Ctrl + E"] },
-    { q: "Which function in Excel is used to count only numeric values in a range?", a: "c", options: ["COUNTA", "COUNTBLANK", "COUNT", "SUM"] },
-    { q: "Which keyboard shortcut is used to fill cells automatically in Excel?", a: "a", options: ["Ctrl + D", "Ctrl + R", "Ctrl + Shift + L", "Ctrl + E"] },
-    { q: "Which Microsoft Office application is used for email management?", a: "c", options: ["Word", "Excel", "Outlook", "Access"] },
-    { q: "Which Windows key combination is used to minimize all open windows?", a: "d", options: ["Win + D", "Alt + Tab", "Ctrl + M", "Win + M"] },
-    { q: "Which function in Excel is used to join text from multiple cells?", a: "b", options: ["SPLIT", "CONCATENATE", "JOIN", "MERGE"] },
-    { q: "Which option in Word helps to create a table of contents?", a: "c", options: ["Track Changes", "Spelling & Grammar", "References", "Mail Merge"] },
-    { q: "Which feature in PowerPoint allows you to rehearse your presentation timing?", a: "a", options: ["Rehearse Timings", "Slide Master", "Animations", "Record Slide Show"] },
-    { q: "Which Windows feature is used to uninstall programs?", a: "b", options: ["Device Manager", "Control Panel", "Task Manager", "Command Prompt"] },
-    { q: "Which function in Excel is used to search for a value in a table?", a: "d", options: ["IF", "COUNTIF", "INDEX", "VLOOKUP"] },
-    { q: "Which option in Word is used to track changes made in a document?", a: "a", options: ["Track Changes", "Page Layout", "Table of Contents", "Review"] },
-    { q: "Which shortcut key is used to insert a new worksheet in Excel?", a: "c", options: ["Ctrl + S", "Ctrl + X", "Shift + F11", "Ctrl + M"] },
-    { q: "Which function is used to extract text from the right side of a cell in Excel?", a: "b", options: ["LEFT", "RIGHT", "MID", "FIND"] },
-    { q: "Which feature in Excel allows you to freeze specific rows and columns?", a: "b", options: ["Consolidate", "Freeze Panes", "Split", "Protect Sheet"] },
-    { q: "Which option in PowerPoint is used to add speaker notes?", a: "b", options: ["Slide Sorter", "Notes Pane", "Master Slide", "Outline View"] },
-    { q: "Which Windows tool is used to check disk errors?", a: "d", options: ["Device Manager", "Disk Cleanup", "Task Scheduler", "Check Disk"] },
-    { q: "Which Excel function is used to return the current date and time?", a: "a", options: ["NOW()", "TODAY()", "DATE()", "TIME()"] },
-    { q: "Which feature in Word is used to split a document into sections?", a: "c", options: ["Columns", "Styles", "Page Breaks", "Footnotes"] },
-    { q: "Which keyboard shortcut is used to insert a hyperlink in Office applications?", a: "d", options: ["Ctrl + S", "Ctrl + P", "Ctrl + K", "Ctrl + H"] },
-    { q: "Which function in Excel is used to calculate the average of a range?", a: "b", options: ["SUM", "AVERAGE", "COUNT", "PRODUCT"] },
-    { q: "Which Windows command is used to view the IP address of a computer?", a: "a", options: ["ipconfig", "ping", "netstat", "tracert"] },
-    { q: "Which Excel function is used to extract a portion of text from a cell?", a: "c", options: ["LEFT", "RIGHT", "MID", "EXTRACT"] },
-    { q: "Which feature in Excel is used to apply automatic formatting based on cell values?", a: "b", options: ["Data Validation", "Conditional Formatting", "Goal Seek", "Scenario Manager"] },
-    { q: "Which feature in Word allows automatic numbering of pages?", a: "b", options: ["Headers", "Page Numbers", "Footnotes", "Track Changes"] },
-    { q: "Which PowerPoint feature allows you to change the appearance of all slides at once?", a: "d", options: ["Themes", "Transitions", "Slide Show", "Slide Master"] }
+{ q: "What is the primary purpose of programming?", a: "b", options: ["Designing websites", "Giving instructions to a computer", "Editing images", "Creating animations"] },
+
+{ q: "Which tool is commonly used for writing JavaScript code?", a: "a", options: ["VS Code", "Microsoft Word", "Adobe Photoshop", "Excel"] },
+
+{ q: "Which keyword is used to declare a variable in JavaScript?", a: "c", options: ["constant", "define", "let", "varname"] },
+
+{ q: "Which data type is used to store text in JavaScript?", a: "d", options: ["Number", "Boolean", "Array", "String"] },
+
+{ q: "Which symbol is used for multiplication in JavaScript?", a: "b", options: ["+", "*", "-", "/"] },
+
+{ q: "How do you display 'Hello, World!' in JavaScript?", a: "d", options: ["print('Hello, World!')", "echo 'Hello, World!';", "msgBox('Hello, World!');", "console.log('Hello, World!');"] },
+
+{ q: "Which of the following is NOT a JavaScript data type?", a: "a", options: ["Character", "Boolean", "Number", "Object"] },
+
+{ q: "What will be the output of: console.log(typeof 42);?", a: "c", options: ["'string'", "'boolean'", "'number'", "'object'"] },
+
+{ q: "Which of the following is a correct way to define an array in JavaScript?", a: "b", options: ["let arr = {1, 2, 3};", "let arr = [1, 2, 3];", "let arr = (1, 2, 3);", "let arr = <1, 2, 3>;"] },
+
+{ q: "Which keyword is used to declare a constant in JavaScript?", a: "c", options: ["var", "let", "const", "define"] }
 ];
 
 
@@ -193,7 +174,7 @@ const questions = [
         function startQuiz() {
     let password = document.getElementById("password").value;
 
-    if (password !== "1234") {
+    if (password !== "") {
         alert("كلمة المرور غير صحيحة! الرجاء المحاولة مرة أخرى.");
         return;
     }
@@ -283,7 +264,7 @@ let serverUrl = ""; // سيتم تحديثه تلقائيًا عند تحميل 
 
 // دالة لجلب رابط السيرفر المخزن في GitHub
 function fetchServerUrl() {
-    return fetch("https://raw.githubusercontent.com/etiqotwf/javaScriptCourse/main/serverUrl.json")
+    return fetch("https://raw.githubusercontent.com/etiqotwf/dictonary/main/serverUrl.json")
         .then(response => response.json())
         .then(data => {
             if (data.serverUrl) {
