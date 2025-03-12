@@ -20,7 +20,7 @@ import { exec } from 'child_process';
 import * as XLSX from 'xlsx';
 
 // تحديد مسار حفظ نموذج الذكاء الاصطناعي في ملف JSON
-const MODEL_PATH = './storage/model.json';
+const MODEL_PATH = './model.json';
 
 // تحديد مسار حفظ الرسم البياني المُنشأ
 const CHART_PATH = './price_chart.png';
