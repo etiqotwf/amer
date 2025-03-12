@@ -1,0 +1,6 @@
+{
+  "minInput": 1,
+  "maxInput": 2023,
+  "minOutput": 45000,
+  "maxOutput": 200000
+}
