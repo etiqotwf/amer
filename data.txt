@@ -1,0 +1,97 @@
+🧑 Name       : amer
+📞 Phone     : Unknown
+📅 Date      : 2/21/2025
+⏰ Start Time: 7:14:50 PM
+⏳ Time Taken: 1 min 5 sec
+🏆 Score     : 4/50 (8.00%)
+---------------------------🧑 Name       : Unknown
+📞 Phone     : Unknown
+📅 Date      : 2/24/2025
+⏰ Start Time: 11:00:33 PM
+⏳ Time Taken: 0 min 39 sec
+🏆 Score     : 4/15 (26.67%)
+-----------------------------------
+🧑 Name       : حامد عبد الهادي محمد 
+📞 Phone     : 1
+📅 Date      : 2/26/2025
+⏰ Start Time: 10:24:55 AM
+⏳ Time Taken: 8 min 10 sec
+🏆 Score     : 15/15 (100.00%)
+-----------------------------------
+🧑 Name       : manar mohammed
+📞 Phone     : 1
+📅 Date      : 2/26/2025
+⏰ Start Time: 10:25:15 AM
+⏳ Time Taken: 7 min 51 sec
+🏆 Score     : 15/15 (100.00%)
+-----------------------------------
+🧑 Name       : Fayza Ahmad El Saqa
+📞 Phone     : Quiz 1
+📅 Date      : 2/26/2025
+⏰ Start Time: 10:25:12 ص
+⏳ Time Taken: 8 min 0 sec
+🏆 Score     : 15/15 (100.00%)
+-----------------------------------
+🧑 Name       : Unknown
+📞 Phone     : Unknown
+📅 Date      : 2/27/2025
+⏰ Start Time: 12:02:09 AM
+⏳ Time Taken: 0 min 48 sec
+🏆 Score     : 5/15 (33.33%)
+-----------------------------------
+🧑 Name       : test
+📞 Phone     : 01224703903
+📅 Date      : 3/3/2025
+⏰ Start Time: 12:55:07 PM
+⏳ Time Taken: 1 min 24 sec
+🏆 Score     : 12/15 (80.00%)
+-----------------------------------
+🧑 Name       : test1
+📞 Phone     : 01224703903
+📅 Date      : 3/3/2025
+⏰ Start Time: 1:06:06 PM
+⏳ Time Taken: 1 min 14 sec
+🏆 Score     : 15/15 (100.00%)
+-----------------------------------
+🧑 Name       : test2
+📞 Phone     : 01224703903
+📅 Date      : 3/3/2025
+⏰ Start Time: 1:11:13 PM
+⏳ Time Taken: 1 min 14 sec
+🏆 Score     : 12/50 (24.00%)
+-----------------------------------
+🧑 Name       : Unknown
+📞 Phone     : Unknown
+📅 Date      : 3/6/2025
+⏰ Start Time: 2:10:11 AM
+⏳ Time Taken: 0 min 25 sec
+🏆 Score     : 13/50 (26.00%)
+-----------------------------------
+🧑 Name       : Unknown
+📞 Phone     : Unknown
+📅 Date      : 3/6/2025
+⏰ Start Time: 11:46:49 AM
+⏳ Time Taken: 1 min 22 sec
+🏆 Score     : 13/50 (26.00%)
+-----------------------------------
+🧑 Name       : Unknown
+📞 Phone     : Unknown
+📅 Date      : 3/11/2025
+⏰ Start Time: 12:28:47 AM
+⏳ Time Taken: 0 min 34 sec
+🏆 Score     : 13/50 (26.00%)
+-----------------------------------
+🧑 Name       : Unknown
+📞 Phone     : Unknown
+📅 Date      : 3/12/2025
+⏰ Start Time: 12:53:00 PM
+⏳ Time Taken: 0 min 29 sec
+🏆 Score     : 13/50 (26.00%)
+-----------------------------------
+🧑 Name       : Unknown
+📞 Phone     : Unknown
+📅 Date      : 3/12/2025
+⏰ Start Time: 12:54:27 PM
+⏳ Time Taken: 0 min 29 sec
+🏆 Score     : 13/50 (26.00%)
+-----------------------------------
