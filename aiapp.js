@@ -8,12 +8,69 @@ const NORMALIZATION_FILE = 'normalization.json';
 const REINFORCEMENT_FILE = 'reinforcement.json';
 const BACKUP_FILE = "reinforcement.json.backup";
 const TEMP_FILE = "reinforcement.json.tmp";
+import path from 'path';
+import os from 'os';
 const USD_TO_EGP = 50.67;
 const LEARNING_RATE = 0.01;
 const EPOCHS = 100;
 const DISCOUNT_FACTOR = 0.95;
 const EPSILON = 0.1;
 const REPLAY_BUFFER_SIZE = 100;
+
+
+// Function to reset all files
+function resetFiles() {
+    const files = [REINFORCEMENT_FILE, WEIGHTS_FILE, MODEL_FILE, NORMALIZATION_FILE];
+
+    files.forEach(file => {
+        if (fs.existsSync(file)) {
+            fs.unlinkSync(file);
+            console.log(`✅ Deleted: ${file}`);
+        } else {
+            console.log(`⚠️ Not found: ${file}`);
+        }
+    });
+
+    console.log("🚀 All files have been reset.");
+}
+
+// Check if the script was run with "reset" argument
+if (process.argv[2] === 'reset') {
+    resetFiles();
+    process.exit(); // Exit after resetting files
+}
+
+
+// Function to save and download the backup file
+function saveBackup() {
+    if (!fs.existsSync(BACKUP_FILE)) {
+        console.log("❌ Backup file not found!");
+        return;
+    }
+
+    // Get the user's Downloads folder
+    const downloadsFolder = path.join(os.homedir(), 'Downloads');
+    const destinationPath = path.join(downloadsFolder, BACKUP_FILE);
+
+    // Copy the backup file to Downloads
+    fs.copyFileSync(BACKUP_FILE, destinationPath);
+    console.log(`✅ Backup file saved to: ${destinationPath}`);
+}
+
+// Check command-line arguments
+const command = process.argv[2];
+
+if (command === 'reset') {
+    resetFiles();
+    process.exit();
+} else if (command === 'save') {
+    saveBackup();
+    process.exit();
+}
+
+
+
+
 
 // ✅ تحميل البيانات وضمان أنها مصفوفة
 let replayBuffer = [];
@@ -174,6 +231,10 @@ async function saveModel(model, normalizationParams, reinforcementData) {
             }
 
             console.log("✅ Model, reinforcement learning data & normalization parameters saved successfully!");
+
+// Stop execution after success
+process.exit(0);
+
         } catch (error) {
             console.error("❌ Error saving reinforcement data:", error);
 
@@ -187,6 +248,10 @@ async function saveModel(model, normalizationParams, reinforcementData) {
                     console.warn("⚠️ Backup not restored because it is empty.");
                 }
             }
+// Exit with failure code after handling the error
+process.exit(1);
+
+
         }
     }));
 }
