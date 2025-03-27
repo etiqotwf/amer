@@ -316,8 +316,8 @@ async function logToExcel(userInputs, priceUSD, priceEGP) {
 
 
 async function runModel() {
-    let model;
-    let normalizationParams;
+    let model, normalizationParams;
+    const USD_TO_EGP = 30; // استبدل بالقيمة الفعلية لسعر الصرف
 
     if (modelExists()) {
         console.log("📦 Found saved model. Loading...");
@@ -334,22 +334,41 @@ async function runModel() {
     }
 
     const userInput = await askUserForInputs();
+    if (userInput.includes(undefined) || userInput.includes(NaN)) {
+        console.error("❌ Error: Invalid user input.");
+        return;
+    }
+
     console.log(`🔢 Inputs received: ${userInput.join(", ")}`);
 
     const normalizedInput = normalizeData(userInput, normalizationParams.minInput, normalizationParams.maxInput);
+    if (normalizedInput.includes(NaN)) {
+        console.error("❌ Error: Normalized data contains NaN.");
+        return;
+    }
+
     const inputTensor = tf.tensor2d([normalizedInput]);
+    const predictedTensor = model.predict(inputTensor);
+    const predictedCostNormalized = predictedTensor.dataSync()[0];
 
-    const prediction = model.predict(inputTensor);
-    const predictedEGP = (await prediction.data())[0] * (normalizationParams.maxOutput - normalizationParams.minOutput) + normalizationParams.minOutput;
-    const predictedUSD = predictedEGP / USD_TO_EGP;
+    if (isNaN(predictedCostNormalized)) {
+        console.error("❌ Error: Predicted cost is NaN.");
+        return;
+    }
 
-    console.log(`🔮 Predicted permit cost: $${predictedUSD.toFixed(2)} USD (${predictedEGP.toFixed(2)} EGP)`);
+    const predictedCost = predictedCostNormalized * (normalizationParams.maxOutput - normalizationParams.minOutput) + normalizationParams.minOutput;
+    const predictedUSD = predictedCost / USD_TO_EGP;
 
+    console.log(`🔮 Predicted permit cost: $${predictedUSD.toFixed(2)} USD (${predictedCost.toFixed(2)} EGP)`);
 
-    await generateChart(userInput, predictedUSD, predictedEGP);
-    await logToExcel(userInput, predictedUSD, predictedEGP);
+    // إضافة إنشاء المخطط
+    await generateChart(userInput, predictedUSD, predictedCost);
     
-
+    // إضافة حفظ البيانات في ملف إكسل
+    await logToExcel(userInput, predictedUSD, predictedCost);
+    
+    const actualCost = await askForActualCost();
+    await reinforcementLearning(model, userInput, parseFloat(actualCost), normalizationParams);
 }
 
 runModel().catch(console.error);

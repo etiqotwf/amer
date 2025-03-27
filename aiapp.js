@@ -1,6 +1,8 @@
 import * as tf from '@tensorflow/tfjs';
 import fs from 'fs';
 import readline from 'readline';
+import { exec } from 'child_process';
+
 
 const MODEL_FILE = 'model.json';
 const WEIGHTS_FILE = 'weights.bin';
@@ -10,12 +12,43 @@ const BACKUP_FILE = "reinforcement.json.backup";
 const TEMP_FILE = "reinforcement.json.tmp";
 import path from 'path';
 import os from 'os';
-const USD_TO_EGP = 50.67;
+const HELP_FILE = 'help.txt';
 const LEARNING_RATE = 0.01;
 const EPOCHS = 100;
 const DISCOUNT_FACTOR = 0.95;
 const EPSILON = 0.1;
 const REPLAY_BUFFER_SIZE = 100;
+const command = process.argv[2];
+import { spawn } from "child_process";
+// استيراد createCanvas من مكتبة 'canvas' لإنشاء ورسم الرسوم البيانية بدون الحاجة إلى مستعرض
+import { createCanvas } from 'canvas';
+
+// استيراد مكتبة Chart.js لرسم الرسوم البيانية بسهولة
+import Chart from 'chart.js/auto';
+
+// استيراد مكتبة 'xlsx' للتعامل مع ملفات Excel بصيغة XLSX (قراءة وكتابة البيانات)
+import * as XLSX from 'xlsx';
+
+
+// تحديد مسار حفظ الرسم البياني المُنشأ
+const CHART_PATH = './price_chart.png';
+
+// تحديد مسار ملف Excel الذي يحتوي على العمليات أو البيانات المخزنة
+const EXCEL_PATH = './operations.xlsx';
+
+
+
+
+// وظيفة لعرض ملف المساعدة
+function openHelpFile() {
+    spawn("cmd", ["/c", "start", HELP_FILE], { detached: true, stdio: "ignore" }).unref();
+    process.exit(0); // إنهاء التطبيق مباشرة بعد فتح الملف
+}
+
+if (command === "help") {
+    openHelpFile();
+}
+
 
 
 // Function to reset all files
@@ -58,7 +91,6 @@ function saveBackup() {
 }
 
 // Check command-line arguments
-const command = process.argv[2];
 
 if (command === 'reset') {
     resetFiles();
@@ -522,7 +554,7 @@ async function askUserForInputs() {
     }
     
     const questions = [
-        "📏 Enter construction area (m²): ",
+        "📏 Enter construction area (square meters): ",
         "🏠 Enter building type (1: Residential, 2: Pump Station, 3: Bridge): ",
         "🏢 Enter number of floors: ",
         "📅 Enter permit duration (years): ",
@@ -551,20 +583,224 @@ async function askForActualCost() {
     });
 }
 
+
+
+async function generateChart(userInputs, permitFee) {
+    const width = 700, height = 450;
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+
+    // تحويل القيم الرقمية لنوع المبنى إلى نصوص واضحة بالعربية
+    const buildingTypes = ["سكن", "محطة", "كوبري"];
+    const buildingType = buildingTypes[userInputs[1] - 1] || "غير معروف";
+
+    // تحويل القيم الرقمية لنوع التربة إلى نصوص واضحة بالعربية
+    const soilTypes = ["طينية", "رملية", "زلطية", "صخرية"];
+    const soilType = soilTypes[userInputs[5] - 1] || "غير معروف";
+
+    // سنة الترخيص (لا تُعرض كقيمة كبيرة)
+    const permitYear = userInputs[7];
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: [
+                '📏 المساحة (م²)', 
+                '🏠 نوع المبنى', 
+                '🏢 عدد الطوابق', 
+                '📅 المدة (سنوات)', 
+                '🌊 المسافة (م)', 
+                '🛠️ نوع التربة', 
+                '💰 تكلفة المواد (للمتر²)'
+            ],
+            datasets: [{
+                label: 'معايير الترخيص',
+                data: [
+                    userInputs[0], 
+                    1, // تمثيل نوع المبنى برقم صغير حتى لا يؤثر على الارتفاع
+                    userInputs[2], 
+                    userInputs[3], 
+                    userInputs[4], 
+                    1, // تمثيل نوع التربة برقم صغير 
+                    userInputs[6] 
+                ],
+                backgroundColor: ['#36A2EB', '#FFCE56', '#4CAF50', '#FF6384', '#8E44AD', '#FFC300', '#C70039']
+            }]
+        },
+        options: {
+            responsive: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: [
+                        '🌊 الترخيص بإقامة أعمال خاصة داخل الأملاك العامة ذات الصلة بالموارد المائية والري 🌊',
+                        `📊 المدخلات: مساحة ${userInputs[0]}م²، نوع ${buildingType}, طوابق ${userInputs[2]}, مدة ${userInputs[3]} سنوات، مسافة ${userInputs[4]}م`,
+                        `🛠️ نوع التربة: ${soilType} - 💰 تكلفة المواد: ${userInputs[6]} ج.م للمتر² - 📆 سنة الترخيص: ${permitYear}`,
+                      `💰 التكلفة المقدرة للترخيص: $${permitFee.toFixed(2)} 💰`
+
+                    ],
+                    font: { 
+                        size: 19,
+                        weight: 'bold',
+                        family: 'Arial'
+                    },
+                    color: 'white',
+                    padding: { top: 15, bottom: 15 }
+                },
+                legend: { display: false },
+                tooltip: { enabled: true },
+                datalabels: {
+                    anchor: 'end',
+                    align: 'top',
+                    color: 'white',
+                    font: { size: 16, weight: 'bold' },
+                    formatter: function(value, context) {
+                        if (context.dataIndex === 1 || context.dataIndex === 5) {
+                            return ""; // عدم عرض القيم الخاصة بنوع المبنى والتربة
+                        }
+                        return `${Math.round(value).toLocaleString()} ج.م`;
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: '📏 معايير البناء',
+                        color: 'white',
+                        font: { size: 18, weight: 'bold' }
+                    },
+                    ticks: { color: 'white', font: { weight: 'bold' } },
+                    grid: { color: 'rgba(255, 255, 255, 0.2)' }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: '📊 القيم',
+                        color: 'white',
+                        font: { size: 18, weight: 'bold' }
+                    },
+                    ticks: { 
+                        color: 'white',
+                        font: { weight: 'bold' },
+                        beginAtZero: true,
+                        callback: function(value) {
+                            return `${Math.round(value).toLocaleString()} ج.م`;
+                        }
+                    },
+                    grid: { color: 'rgba(255, 255, 255, 0.2)' }
+                }
+            },
+            barThickness: 50 // 🔥 زيادة سماكة الأعمدة
+        }
+    });
+
+    // تحويل الرسم البياني إلى صورة بصيغة PNG
+    const buffer = canvas.toBuffer('image/png');
+
+    // حفظ الصورة كملف محلي
+    await fs.promises.writeFile(CHART_PATH, buffer);
+    console.log(`📊 Chart saved as ${CHART_PATH}`);
+
+    // فتح الصورة تلقائيًا بعد حفظها
+    exec(`start ${CHART_PATH}`, (err) => {
+        if (err) console.error("⚠️ فشل في فتح الرسم البياني:", err);
+    });
+}
+
+
+
+
+
+
+async function logToExcel(userInputs, priceUSD, priceEGP) {
+    try {
+        let workbook;
+        try {
+            // 📂 محاولة قراءة ملف Excel إذا كان موجودًا
+            const fileBuffer = await fs.promises.readFile(EXCEL_PATH);
+            workbook = XLSX.read(fileBuffer, { type: "buffer" });
+        } catch {
+            // 📄 إنشاء ملف جديد إذا لم يكن موجودًا
+            workbook = XLSX.utils.book_new();
+            const sheet = XLSX.utils.aoa_to_sheet([
+                [
+                    "📆 Date & Time",
+    "📏  construction area (square meters)",
+    "🏠  building type (1: Residential, 2: Pump Station, 3: Bridge)",
+    "🏢  number of floors",
+    "📅  permit duration (years)",
+    "🌊  distance from waterway (m)",
+    "🛠️  soil type (1: Rocky, 2: Clay, 3: Sandy)",
+    "💰  material cost per m²",
+    "📆  application year",
+    "💰  house price (USD)",
+    "💰  house price (EGP)"
+                ]
+            ]);
+            XLSX.utils.book_append_sheet(workbook, sheet, "PermitData");
+        }
+
+        // 📜 الحصول على ورقة البيانات
+        const sheet = workbook.Sheets["PermitData"];
+        
+        // 📝 تجهيز صف البيانات الجديد
+        const newRow = [
+            new Date().toISOString().replace("T", " ").slice(0, 19), // 🕒 التاريخ بصيغة إنجليزية YYYY-MM-DD HH:MM:SS
+            ...userInputs, // 📌 القيم المدخلة
+            priceUSD.toFixed(2), // 💲 السعر بالدولار
+            priceEGP.toFixed(2)   // 💰 السعر بالجنيه المصري
+        ];
+
+        // 📌 تحويل ورقة البيانات إلى مصفوفة JSON لتحديثها
+        const sheetData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+        // ➕ إضافة الصف الجديد إلى البيانات
+        sheetData.push(newRow);
+
+        // 🔄 إعادة تحويل البيانات إلى ورقة عمل
+        const newSheet = XLSX.utils.aoa_to_sheet(sheetData);
+        workbook.Sheets["PermitData"] = newSheet;
+
+        // 💾 حفظ الملف بعد التحديث
+        const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
+        await fs.promises.writeFile(EXCEL_PATH, excelBuffer);
+
+        console.log("✅ Operation logged in Excel successfully!"); // ✅ تأكيد نجاح العملية
+    } catch (error) {
+        console.error("⚠️ Error logging to Excel:", error);
+    }
+}
+
+
+
+
+
 async function runModel() {
     let model, normalizationParams;
+    const USD_TO_EGP = 50.67; // استبدل بالقيمة الفعلية لسعر الصرف
+
     if (modelExists()) {
+        console.log("📦 Found saved model. Loading...");
         ({ model, normalizationParams } = await loadModel());
     } else {
+        console.log("🏗️ No saved model found. Training a new model...");
         model = createModel();
         normalizationParams = await trainModel(model);
     }
-    
+
+    if (!normalizationParams) {
+        console.error("❌ Error: Normalization parameters are missing! Cannot proceed.");
+        return;
+    }
+
     const userInput = await askUserForInputs();
     if (userInput.includes(undefined) || userInput.includes(NaN)) {
         console.error("❌ Error: Invalid user input.");
         return;
     }
+
+    console.log(`🔢 Inputs received: ${userInput.join(", ")}`);
 
     const normalizedInput = normalizeData(userInput, normalizationParams.minInput, normalizationParams.maxInput);
     if (normalizedInput.includes(NaN)) {
@@ -572,7 +808,7 @@ async function runModel() {
         return;
     }
 
-    const inputTensor = tf.tensor2d([normalizedInput]); 
+    const inputTensor = tf.tensor2d([normalizedInput]);
     const predictedTensor = model.predict(inputTensor);
     const predictedCostNormalized = predictedTensor.dataSync()[0];
 
@@ -582,8 +818,16 @@ async function runModel() {
     }
 
     const predictedCost = predictedCostNormalized * (normalizationParams.maxOutput - normalizationParams.minOutput) + normalizationParams.minOutput;
-    console.log(`🔮 Predicted cost: ${predictedCost.toFixed(2)} EGP`);
+    const predictedUSD = predictedCost / USD_TO_EGP;
 
+    console.log(`🔮 Predicted permit cost: $${predictedUSD.toFixed(2)} USD (${predictedCost.toFixed(2)} EGP)`);
+
+    // إضافة إنشاء المخطط
+    await generateChart(userInput, predictedUSD, predictedCost);
+    
+    // إضافة حفظ البيانات في ملف إكسل
+    await logToExcel(userInput, predictedUSD, predictedCost);
+    
     const actualCost = await askForActualCost();
     await reinforcementLearning(model, userInput, parseFloat(actualCost), normalizationParams);
 }
