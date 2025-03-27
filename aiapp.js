@@ -314,30 +314,28 @@ async function loadModel() {
         }
         const normalizationParams = JSON.parse(fs.readFileSync(NORMALIZATION_FILE, 'utf8'));
 
-        // ✅ تحميل أو إنشاء بيانات التعليم التعزيزي
+        // ✅ تحميل بيانات التعليم التعزيزي إن وجد
         let reinforcementData = {}; 
         if (fs.existsSync(REINFORCEMENT_FILE)) {
             reinforcementData = JSON.parse(fs.readFileSync(REINFORCEMENT_FILE, 'utf8'));
             console.log("📜 Reinforcement Learning Data Loaded");
-
-            // 🔄 تحديث البيانات إذا كانت قديمة أو غير مكتملة
-            const defaultReinforcement = {
-                learningRate: 0.01,
-                discountFactor: 0.99,
-                explorationRate: 0.1
-            };
-            reinforcementData = { ...defaultReinforcement, ...reinforcementData };
-            fs.writeFileSync(REINFORCEMENT_FILE, JSON.stringify(reinforcementData, null, 2));
         } else {
-            console.warn("⚠️ Reinforcement learning file not found! Creating a new one...");
-            reinforcementData = {
-                learningRate: 0.01,
-                discountFactor: 0.99,
-                explorationRate: 0.1
-            };
-            fs.writeFileSync(REINFORCEMENT_FILE, JSON.stringify(reinforcementData, null, 2));
-            console.log("✅ Reinforcement learning file created successfully!");
+            console.warn("⚠️ Reinforcement learning file not found!");
         }
+
+        // ✅ القيم الافتراضية لا تُكتب في الملف، تُستخدم فقط عند الحاجة
+        const defaultReinforcement = {
+            learningRate: 0.01,
+            discountFactor: 0.99,
+            explorationRate: 0.1
+        };
+
+        // ✅ استخدام القيم الافتراضية عند الحاجة **دون تعديل الملف**
+        const finalReinforcementData = {
+            learningRate: reinforcementData.learningRate ?? defaultReinforcement.learningRate,
+            discountFactor: reinforcementData.discountFactor ?? defaultReinforcement.discountFactor,
+            explorationRate: reinforcementData.explorationRate ?? defaultReinforcement.explorationRate
+        };
 
         // ✅ تحميل النموذج في TensorFlow.js
         const model = await tf.loadLayersModel(tf.io.fromMemory(modelArtifacts));
@@ -350,7 +348,7 @@ async function loadModel() {
         });
 
         console.log("✅ Model loaded and compiled successfully!");
-        return { model, normalizationParams, reinforcementData };
+        return { model, normalizationParams, reinforcementData: finalReinforcementData };
 
     } catch (error) {
         console.error("⚠️ Error loading model:", error.message);
@@ -576,7 +574,7 @@ async function askUserForInputs() {
 async function askForActualCost() {
     return new Promise(resolve => {
         const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-        rl.question("💰 input actualCost ", answer => {
+        rl.question("💰 input actualCost and save record : ", answer => {
             rl.close();
             resolve(parseFloat(answer) || 0);
         });
