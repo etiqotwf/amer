@@ -15,6 +15,8 @@ import mammoth from "mammoth"; // مكتبة استخراج نصوص من docx
 import xlsx from "xlsx";
 import pdfParse from "pdf-parse";
 import { Document, Packer, Paragraph, TextRun } from "docx";
+import { transliterate } from "transliteration";
+
 
 const { terminal } = terminalKit; // استخراج `terminal`
 
@@ -189,34 +191,7 @@ async function searchFiles() {
 
 
 // دالة لفتح متصفح الملفات
-async function openFilePicker() {
-    console.log("📂 Please select a file...");
 
-    let command;
-    if (process.platform === "win32") {
-        command =
-            'powershell -Command "[System.Reflection.Assembly]::LoadWithPartialName(\'System.Windows.Forms\');$f = New-Object System.Windows.Forms.OpenFileDialog;$f.Filter = \'All Files (*.*)|*.*\';$f.ShowDialog() | Out-Null;$f.FileName"';
-    } else if (process.platform === "darwin") {
-        command = 'osascript -e \'tell app "Finder" to choose file\'';
-    } else {
-        command = "zenity --file-selection";
-    }
-
-    exec(command, (error, stdout) => {
-        if (error) {
-            console.error("❌ Error selecting file:", error.message);
-            return;
-        }
-
-        const filePath = stdout.split("\r\n").filter((line) => line.trim() !== "" && !line.includes("GAC")).pop()?.trim();
-        if (!filePath) {
-            console.log("❌ No file selected.");
-            return;
-        }
-
-        archiveFile(filePath);
-    });
-}
 
 // دالة لنقل الملف إلى الأرشيف
 async function archiveFile(filePath) {
@@ -494,7 +469,7 @@ async function mainMenu() {
         ]);
 
         if (action === "archive") {
-            await openFilePicker();
+            await openFilePicker(archiveFile);
         } else if (action === "list") {
             listArchivedFiles();
         } else if (action === "search") {
@@ -502,7 +477,7 @@ async function mainMenu() {
         } else if (action === "searchInside") {
             await searchInsideFile();
         } else if (action === "convert") {
-            await convertFiles();
+            await openFilePicker(convertPdfToDocx);
         } else if (action === "open") {
             const { id } = await inquirer.prompt([{ type: "input", name: "id", message: chalk.blue("🖥️ Enter file ID to open:") }]);
             openFile(parseInt(id));
@@ -519,12 +494,65 @@ async function mainMenu() {
     }
 }
 
-async function convertFiles() {
-    const { filePath } = await inquirer.prompt([
-        { type: "input", name: "filePath", message: chalk.cyan("📄 Enter the file path:") },
-    ]);
-    await convertPdfToDocx(filePath);
+
+
+async function openFilePicker(callback) {
+    console.log("📂 Please select a file...");
+
+    let command;
+    if (process.platform === "win32") {
+        command =
+            'powershell -Command "chcp 65001; [System.Reflection.Assembly]::LoadWithPartialName(\'System.Windows.Forms\');$f = New-Object System.Windows.Forms.OpenFileDialog;$f.Filter = \'All Files (*.*)|*.*\';$f.ShowDialog() | Out-Null;$f.FileName"';
+    } else if (process.platform === "darwin") {
+        command = `osascript -e 'tell application "Finder" to choose file'`;
+    } else {
+        command = "zenity --file-selection";
+    }
+
+    exec(command, { encoding: "utf8" }, (error, stdout) => {
+        if (error) {
+            console.error("❌ Error selecting file:", error.message);
+            return;
+        }
+
+        let filePath = stdout
+            .split(/\r?\n/)
+            .map(line => line.trim())
+            .filter(line => line && !line.includes("---") && !line.includes("GAC"))
+            .pop();
+
+        if (!filePath) {
+            console.log("❌ No file selected.");
+            return;
+        }
+
+        filePath = decodeURIComponent(filePath);
+
+        if (!fs.existsSync(filePath)) {
+            console.error("❌ File not found:", filePath);
+            return;
+        }
+
+        const fileDir = path.dirname(filePath);
+        const fileExt = path.extname(filePath);
+        const originalFileName = path.basename(filePath, fileExt);
+
+        // 🔹 تحويل اسم الملف إلى كلمة إنجليزية واحدة بدون فواصل أو علامات
+        let newFileName = transliterate(originalFileName).replace(/[^a-zA-Z0-9]/g, "");
+        if (!newFileName) newFileName = "ConvertedFile"; // تجنب الاسم الفارغ
+        const newFilePath = path.join(fileDir, newFileName + fileExt);
+
+        fs.rename(filePath, newFilePath, (err) => {
+            if (err) {
+                console.error("❌ Error renaming file:", err.message);
+                return;
+            }
+            console.log("✅ File renamed to:", newFilePath);
+            callback(newFilePath);
+        });
+    });
 }
+
 
 
 
