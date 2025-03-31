@@ -12,6 +12,10 @@ import ora from "ora";
 import terminalKit from "terminal-kit"; 
 import gradient from "gradient-string";
 import mammoth from "mammoth"; // مكتبة استخراج نصوص من docx
+import xlsx from "xlsx";
+import pdfParse from "pdf-parse";
+import { Document, Packer, Paragraph, TextRun } from "docx";
+
 const { terminal } = terminalKit; // استخراج `terminal`
 
 
@@ -422,6 +426,45 @@ async function requestPassword() {
     }
 }
 
+
+async function convertPdfToDocx(pdfPath) {
+    if (!fs.existsSync(pdfPath)) {
+        console.error(`❌ Error: The file is not found at the path: ${pdfPath}`);
+        return;
+    }
+    
+    const outputDocxPath = pdfPath.replace(/\.pdf$/, ".docx");
+    const pdfBuffer = fs.readFileSync(pdfPath);
+    const data = await pdfParse(pdfBuffer);
+    const extractedText = data.text.trim();
+    const paragraphs = extractedText.split("\n").filter(p => p.trim() !== "");
+
+    const doc = new Document({
+        sections: [{
+            properties: {},
+            children: paragraphs.map(paragraph => {
+                const isTitle = paragraph.includes(":") || paragraph.split(" ").length <= 5;
+                return new Paragraph({
+                    bidirectional: true,
+                    children: [
+                        new TextRun({
+                            text: paragraph,
+                            bold: isTitle,
+                            size: isTitle ? 32 : 26,
+                            font: "Arial",
+                        }),
+                    ],
+                    spacing: { after: isTitle ? 250 : 150 },
+                });
+            }),
+        }],
+    });
+    
+    const docBuffer = await Packer.toBuffer(doc);
+    fs.writeFileSync(outputDocxPath, docBuffer);
+    console.log(`✅ Conversion successful: ${outputDocxPath}`);
+}
+
 async function mainMenu() {
     printTitle();
 
@@ -435,12 +478,13 @@ async function mainMenu() {
                 choices: [
                     { key: "A", name: "\x1b[1m\x1b[33m[1] [A] Archive a file\x1b[0m", value: "archive" },
                     { key: "L", name: "\x1b[1m\x1b[36m[2] [L] List archived files\x1b[0m", value: "list" },
-                    { key: "S", name: "\x1b[1m\x1b[38;5;203m[3] [S] Search for files\x1b[0m", value: "search" },
+                    { key: "S", name: "\x1b[1m\x1b[38;5;10m[3] [S] Search for files\x1b[0m", value: "search" },
                     { key: "SI", name: "\x1b[1m\x1b[38;5;214m[4] [SI] Search inside a file\x1b[0m", value: "searchInside" },
-                    { key: "O", name: "\x1b[1m\x1b[32m[5] [O] Open a file\x1b[0m", value: "open" },
-                    { key: "R", name: "\x1b[1m\x1b[35m[6] [R] Restore a file\x1b[0m", value: "restore" },
-                    { key: "X", name: "\x1b[1m\x1b[91m[7] [X] Delete a file\x1b[0m", value: "delete" },
-                    { key: "E", name: "\x1b[1m\x1b[37m[8] [E] Exit\x1b[0m", value: "exit" }
+                    { key: "C", name: "\x1b[1m\x1b[38;5;49m[5] [C] Convert PDF ↔ DOCX\x1b[0m", value: "convert" },
+                    { key: "O", name: "\x1b[1m\x1b[38;5;223m[6] [O] Open a file\x1b[0m", value: "open" },
+                    { key: "R", name: "\x1b[1m\x1b[35m[7] [R] Restore a file\x1b[0m", value: "restore" },
+                    { key: "X", name: "\x1b[1m\x1b[91m[8] [X] Delete a file\x1b[0m", value: "delete" },
+                    { key: "E", name: "\x1b[1m\x1b[37m[9] [E] Exit\x1b[0m", value: "exit" }
                 ],
                 pageSize: 10,
                 loop: false,
@@ -457,6 +501,8 @@ async function mainMenu() {
             await searchFiles();
         } else if (action === "searchInside") {
             await searchInsideFile();
+        } else if (action === "convert") {
+            await convertFiles();
         } else if (action === "open") {
             const { id } = await inquirer.prompt([{ type: "input", name: "id", message: chalk.blue("🖥️ Enter file ID to open:") }]);
             openFile(parseInt(id));
@@ -473,39 +519,67 @@ async function mainMenu() {
     }
 }
 
-async function searchInsideFile() {
-    const { keyword } = await inquirer.prompt([
-        { type: "input", name: "keyword", message: chalk.cyan("🔍 Enter keyword to search for:") }
+async function convertFiles() {
+    const { filePath } = await inquirer.prompt([
+        { type: "input", name: "filePath", message: chalk.cyan("📄 Enter the file path:") },
     ]);
+    await convertPdfToDocx(filePath);
+}
+
+
+
+
+async function searchInsideFile() {
+    const { keywords } = await inquirer.prompt([
+        { type: "input", name: "keywords", message: chalk.cyan("🔍 Enter keywords (comma-separated):") }
+    ]);
+
+    const keywordsArray = keywords.split(",").map(k => k.trim().toLowerCase()); // تقسيم الكلمات وتحويلها إلى lowercase
 
     if (!fs.existsSync(archiveDir)) {
         console.error(chalk.red(`❌ The directory "${archiveDir}" does not exist.`));
         return;
     }
 
-    const files = fs.readdirSync(archiveDir).filter(file => file.endsWith(".docx"));
-    let found = false;
+    const files = fs.readdirSync(archiveDir).filter(file => file.endsWith(".docx") || file.endsWith(".xlsx"));
+    let foundFiles = [];
 
     for (const file of files) {
         const filePath = path.join(archiveDir, file);
         try {
-            const { value: text } = await mammoth.extractRawText({ path: filePath });
-            if (text.toLowerCase().includes(keyword.toLowerCase())) {
-                console.log(chalk.green(`✅ Keyword "${keyword}" found in: ${filePath}`));
-                exec(`"${filePath}"`); // Open the file automatically
-                found = true;
-                break; // Exit after finding the first match
+            let text = "";
+
+            if (file.endsWith(".docx")) {
+                const { value } = await mammoth.extractRawText({ path: filePath });
+                text = value.toLowerCase();
+            } else if (file.endsWith(".xlsx")) {
+                const workbook = xlsx.readFile(filePath);
+                const sheetNames = workbook.SheetNames;
+                sheetNames.forEach(sheet => {
+                    const sheetData = xlsx.utils.sheet_to_json(workbook.Sheets[sheet], { header: 1 });
+                    text += sheetData.flat().join(" ").toLowerCase() + " ";
+                });
+            }
+
+            // التحقق من أن جميع الكلمات موجودة داخل النص بأي ترتيب
+            const allKeywordsFound = keywordsArray.every(keyword => text.includes(keyword));
+
+            if (allKeywordsFound) {
+                console.log(chalk.green(`✅ Keywords found in: ${filePath}`));
+                foundFiles.push(filePath);
             }
         } catch (error) {
             console.error(chalk.red(`❌ Error reading file ${file}:`), error.message);
         }
     }
 
-    if (!found) {
-        console.log(chalk.red(`❌ No matches found for "${keyword}".`));
+    if (foundFiles.length > 0) {
+        console.log(chalk.blue(`📂 Opening ${foundFiles.length} matching files...`));
+        foundFiles.forEach(file => exec(`"${file}"`)); // فتح جميع الملفات المطابقة
+    } else {
+        console.log(chalk.red(`❌ No matches found for the given keywords.`));
     }
 }
-
 
 async function startApp() {
     await requestPassword();
