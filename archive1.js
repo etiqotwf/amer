@@ -18,6 +18,8 @@ import { Document, Packer, Paragraph, TextRun } from "docx";
 import { transliterate } from "transliteration";
 import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib'; // تستخدم لتحويل الصور إلى PDF
+import { c } from 'tar';
+
 
 
 const { terminal } = terminalKit; // استخراج `terminal`
@@ -109,6 +111,8 @@ async function extractTextFromDocx(filePath) {
 
 
 
+
+
 async function searchFiles() {
     const { keyword } = await inquirer.prompt([
         {
@@ -127,9 +131,6 @@ async function searchFiles() {
     `;
     const params = Array(4).fill(`%${keyword}%`);
 
-    const spinner = ora(chalk.green("🔍 Searching for files..."));
-    spinner.start();
-
     try {
         let rows = await new Promise((resolve, reject) => {
             db.all(query, params, (err, results) => {
@@ -138,59 +139,71 @@ async function searchFiles() {
             });
         });
 
-        for (let row of rows) {
-            const filePath = row.archived_path;
-            const fileExtension = row.file_extension.toLowerCase();
-            const textFileExtensions = ["txt", "json", "csv", "md", "log", "xml", "html"];
-            
-            if (textFileExtensions.includes(fileExtension)) {
-                try {
-                    const content = fs.readFileSync(filePath, "utf8");
-                    if (content.includes(keyword)) {
-                        console.log(chalk.green(`✅ Found keyword inside file: ${filePath}`));
-                    }
-                } catch (err) {
-                    console.error(chalk.red(`❌ Error reading file: ${filePath}`));
-                }
-            } else if (fileExtension === "docx") {
-                const content = await extractTextFromDocx(filePath);
-                if (content.includes(keyword)) {
-                    console.log(chalk.green(`✅ Found keyword inside DOCX file: ${filePath}`));
-                }
-            }
-        }
-
-        spinner.stop();
-
         if (rows.length === 0) {
             console.log(chalk.yellow("⚠️ No matching files found."));
             return;
         }
 
+        let resultsText = `=======================================\n`;
+        resultsText += `📂 🔍 Search Results\n`;
+        resultsText += `=======================================\n\n`;
+
         const table = new cliTable({
-            head: ["ID", "Name", "Ext", "Size (KB)", "Date Archived", "Path"].map(header => chalk.white.bold(header)),
+            head: [
+                chalk.white("🆔 ID"), chalk.white("📜 Name"), chalk.white("🗂️ Ext"), chalk.white("📏 Size (KB)"), chalk.white("📅 Date Archived"), chalk.white("📍 Path")
+            ],
             colWidths: [5, 25, 8, 12, 18, 50],
-            wordWrap: true,
+            wordWrap: true
         });
 
-        rows.forEach(row => {
+        for (let row of rows) {
             table.push([
-                chalk.white.bold(row.id),
-                chalk.white(row.file_name),
-                chalk.white(row.file_extension),
-                chalk.white((row.file_size / 1024).toFixed(2)),
-                chalk.white(row.archived_at),
-                chalk.white(row.archived_path)
+                row.id,
+                row.file_name,
+                row.file_extension,
+                (row.file_size / 1024).toFixed(2),
+                row.archived_at,
+                row.archived_path
             ]);
-        });
+
+            resultsText += `🆔 ${row.id}\n`;
+            resultsText += `📜 Name: ${row.file_name}\n`;
+            resultsText += `🗂️ Extension: ${row.file_extension}\n`;
+            resultsText += `📏 Size: ${(row.file_size / 1024).toFixed(2)} KB\n`;
+            resultsText += `📅 Date Archived: ${row.archived_at}\n`;
+            resultsText += `📍 Path: ${row.archived_path}\n`;
+            resultsText += `---------------------------------------\n`;
+        }
 
         console.log(table.toString());
+
+        // Save results to a text file
+        const fileName = "search_results.txt";
+        fs.writeFileSync(fileName, resultsText, "utf8");
+        console.log(chalk.blue(`📂 Search results saved in: ${fileName}`));
+
+        // Ask if the user wants to open the file
+        const { openFile } = await inquirer.prompt([
+            {
+                type: "confirm",
+                name: "openFile",
+                message: "📄 Do you want to open the search results file?",
+                default: false
+            }
+        ]);
+
+        if (openFile) {
+            exec(`"${fileName}"`, (err) => {
+                if (err) {
+                    console.error(chalk.red(`❌ Error opening file: ${fileName}`));
+                }
+            });
+        }
+
     } catch (error) {
-        spinner.stop();
         console.error(chalk.red("❌ Error searching records:"), error.message);
     }
 }
-
 
 // دالة لفتح متصفح الملفات
 
@@ -464,16 +477,20 @@ async function convertPdfToDocx(pdfPath) {
 }
 
 
+
+
+
+
 async function mainMenu() {
     printTitle();
 
     while (true) {
-        const { action } = await inquirer.prompt([
+        const { action } = await inquirer.prompt([  
             {
                 type: "list",
                 name: "action",
                 prefix: " ",
-                message: " ",
+                message: "", // إزالة الرسالة الثابتة هنا
                 choices: [
                     { key: "A", name: "\x1b[1m\x1b[33m[1] [A] Archive a file\x1b[0m", value: "archive" },
                     { key: "L", name: "\x1b[1m\x1b[36m[2] [L] List archived files\x1b[0m", value: "list" },
@@ -483,7 +500,8 @@ async function mainMenu() {
                     { key: "O", name: "\x1b[1m\x1b[38;5;223m[6] [O] Open a file\x1b[0m", value: "open" },
                     { key: "R", name: "\x1b[1m\x1b[35m[7] [R] Restore a file\x1b[0m", value: "restore" },
                     { key: "X", name: "\x1b[1m\x1b[38;5;220m[8] [X] Delete a file\x1b[0m", value: "delete" },
-                    { key: "E", name: "\x1b[1m\x1b[37m[9] [E] Exit\x1b[0m", value: "exit" }
+                    { key: "B", name: "\x1b[1m\x1b[38;5;203m[9] [B] Backup the archive folder\x1b[0m", value: "backup" },
+                    { key: "E", name: "\x1b[1m\x1b[37m[x] [E] Exit\x1b[0m", value: "exit" }
                 ],
                 pageSize: 10,
                 loop: false,
@@ -492,6 +510,7 @@ async function mainMenu() {
             },
         ]);
 
+        // Adding functionality for each action
         if (action === "archive") {
             await openFilePicker(archiveFile);
         } else if (action === "list") {
@@ -511,12 +530,52 @@ async function mainMenu() {
         } else if (action === "delete") {
             const { id } = await inquirer.prompt([{ type: "input", name: "id", message: chalk.red("⚠️ Enter file ID to delete:") }]);
             deleteFile(parseInt(id));
+        } else if (action === "backup") {
+            const { backup } = await inquirer.prompt([
+                {
+                    type: 'confirm',
+                    name: 'backup',
+                    message: 'Do you want to create a backup of the archive folder before exit? (yes/no)',
+                    default: false,
+                },
+            ]);
+
+            if (backup) {
+                const archiveFolderPath = path.join(__dirname, 'archive'); // Path to archive folder
+                const backupFolderPath = 'G:/Backup/ArchiveBackup'; // Path where backup will be stored
+                const backupFilePath = path.join(backupFolderPath, 'archive_backup.tar.gz');
+
+                // Ensure backup folder exists
+                if (!fs.existsSync(backupFolderPath)) {
+                    fs.mkdirSync(backupFolderPath, { recursive: true });
+                }
+
+                // Create the tar backup
+                try {
+                    await c(
+                        {
+                            gzip: true, 
+                            file: backupFilePath,
+                            cwd: path.dirname(archiveFolderPath),
+                        },
+                        [path.basename(archiveFolderPath)]
+                    );
+                    console.log(chalk.green(`Backup created successfully at ${backupFilePath}`));
+                } catch (error) {
+                    console.error(chalk.red(`Error creating backup: ${error.message}`));
+                }
+            }
         } else {
             console.log(chalk.magenta("\n👋 Exiting... Have a great day!\n"));
             process.exit();
         }
+
+        // No clearing the terminal here, just showing messages as usual.
+        console.log(chalk.blue('Returning to the main menu...'));
     }
 }
+
+
 
 
 
