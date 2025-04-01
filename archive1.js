@@ -16,6 +16,8 @@ import xlsx from "xlsx";
 import pdfParse from "pdf-parse";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 import { transliterate } from "transliteration";
+import sharp from 'sharp';
+import { PDFDocument } from 'pdf-lib'; // تستخدم لتحويل الصور إلى PDF
 
 
 const { terminal } = terminalKit; // استخراج `terminal`
@@ -402,12 +404,33 @@ async function requestPassword() {
 }
 
 
+
+
+async function convertImageToPdf(imagePath, pdfPath) {
+    const image = await sharp(imagePath).toBuffer();
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([600, 800]);
+    const img = await pdfDoc.embedJpg(image);
+    page.drawImage(img, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
+    const pdfBytes = await pdfDoc.save();
+    fs.writeFileSync(pdfPath, pdfBytes);
+    console.log(`✅ Image converted to PDF: ${pdfPath}`);
+}
+
 async function convertPdfToDocx(pdfPath) {
     if (!fs.existsSync(pdfPath)) {
         console.error(`❌ Error: The file is not found at the path: ${pdfPath}`);
         return;
     }
-    
+
+    // إذا كان الملف صورة، سيتم تحويله أولاً إلى PDF
+    const extname = path.extname(pdfPath).toLowerCase();
+    if (['.jpg', '.jpeg', '.png', '.gif', '.bmp'].includes(extname)) {
+        const tempPdfPath = pdfPath.replace(extname, '.pdf');
+        await convertImageToPdf(pdfPath, tempPdfPath);
+        pdfPath = tempPdfPath; // استبدال المسار بالـ PDF المحول
+    }
+
     const outputDocxPath = pdfPath.replace(/\.pdf$/, ".docx");
     const pdfBuffer = fs.readFileSync(pdfPath);
     const data = await pdfParse(pdfBuffer);
@@ -434,11 +457,12 @@ async function convertPdfToDocx(pdfPath) {
             }),
         }],
     });
-    
+
     const docBuffer = await Packer.toBuffer(doc);
     fs.writeFileSync(outputDocxPath, docBuffer);
     console.log(`✅ Conversion successful: ${outputDocxPath}`);
 }
+
 
 async function mainMenu() {
     printTitle();
@@ -458,7 +482,7 @@ async function mainMenu() {
                     { key: "C", name: "\x1b[1m\x1b[38;5;49m[5] [C] Convert PDF ↔ DOCX\x1b[0m", value: "convert" },
                     { key: "O", name: "\x1b[1m\x1b[38;5;223m[6] [O] Open a file\x1b[0m", value: "open" },
                     { key: "R", name: "\x1b[1m\x1b[35m[7] [R] Restore a file\x1b[0m", value: "restore" },
-                    { key: "X", name: "\x1b[1m\x1b[91m[8] [X] Delete a file\x1b[0m", value: "delete" },
+                    { key: "X", name: "\x1b[1m\x1b[38;5;220m[8] [X] Delete a file\x1b[0m", value: "delete" },
                     { key: "E", name: "\x1b[1m\x1b[37m[9] [E] Exit\x1b[0m", value: "exit" }
                 ],
                 pageSize: 10,
