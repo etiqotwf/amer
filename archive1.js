@@ -20,6 +20,12 @@ import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib'; // تستخدم لتحويل الصور إلى PDF
 import { c } from 'tar';
 
+import crypto from 'crypto';
+
+const encryptionKey = crypto.randomBytes(32); // يجب حفظ هذا المفتاح لاسترجاع الملفات لاحقًا
+
+
+
 
 
 const { terminal } = terminalKit; // استخراج `terminal`
@@ -29,52 +35,90 @@ const { terminal } = terminalKit; // استخراج `terminal`
 
 
 
-// تحويل __dirname في ES Modules
+
+
+// تحويل fileURL إلى path
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// فتح قاعدة بيانات SQLite
 const dbPath = path.join(__dirname, 'archive.db');
 
+// التأكد من وجود قاعدة البيانات قبل محاولة حذفها
+const dbExists = fs.existsSync(dbPath);
 
-// فتح قاعدة البيانات من جديد
 const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
         console.error("❌ Error opening database:", err.message);
-    } else {
+        return;
     }
-});
 
+    console.log("✅ Database opened successfully.");
 
+    const createTableQuery = `
+        CREATE TABLE IF NOT EXISTS archived_files (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_name TEXT NOT NULL,
+            file_extension TEXT NOT NULL,
+            file_size INTEGER NOT NULL,
+            original_path TEXT NOT NULL,
+            archived_path TEXT NOT NULL,
+            archived_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            encryption_key TEXT,  
+            encrypted_data BLOB  
+        )
+    `;
 
-// إنشاء الجدول مع الأعمدة الجديدة
-db.run(`
-    CREATE TABLE archived_files (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        file_name TEXT NOT NULL,
-        file_extension TEXT NOT NULL,
-        file_size INTEGER NOT NULL,
-        original_path TEXT NOT NULL,
-        archived_path TEXT NOT NULL,
-        archived_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-`, (err) => {
-    if (err) {
-    } else {
+    db.run(createTableQuery, (err) => {
+        if (err) {
+            console.error("❌ Error creating table:", err.message);
+            return;
+        }
+
         console.log("✅ Table 'archived_files' created successfully.");
-    }
+
+        // التحقق من وجود سجلات
+        db.get(`SELECT COUNT(*) AS count FROM archived_files`, (err, row) => {
+            if (err) {
+                console.error("❌ Error checking records:", err.message);
+                return;
+            }
+
+            if (row.count > 0) {
+                console.log(`🔍 Database contains ${row.count} records. Skipping deletion.`);
+            } else if (dbExists) {
+                console.log("🗑️ No records found. Deleting all entries...");
+
+                db.run(`DELETE FROM archived_files`, (err) => {
+                    if (err) {
+                        console.error("❌ Error deleting records:", err.message);
+                        return;
+                    }
+                    console.log("✅ All records deleted.");
+
+                    // إعادة تعيين العداد AUTOINCREMENT
+                    db.run(`DELETE FROM sqlite_sequence WHERE name='archived_files'`, (err) => {
+                        if (err) {
+                            console.error("❌ Error resetting AUTOINCREMENT:", err.message);
+                        } else {
+                            console.log("✅ AUTOINCREMENT reset successfully.");
+                        }
+                    });
+                });
+            }
+        });
+    });
 });
-
-
-// التأكد من وجود مجلد الأرشيف
+// إنشاء مجلد الأرشيف إذا لم يكن موجودًا
 const archiveDir = path.join(__dirname, 'archive');
+console.log(`Archive directory: ${archiveDir}`); // طباعة المسار للتأكد
 if (!fs.existsSync(archiveDir)) {
     fs.mkdirSync(archiveDir);
+    console.log(`✅ Created directory: ${archiveDir}`);
 }
 
 
+
 function openFile(id) {
-    db.get("SELECT archived_path FROM archived_files WHERE id = ?", [id], (err, row) => {
+    db.get("SELECT archived_path, encryption_key FROM archived_files WHERE id = ?", [id], (err, row) => {
         if (err) {
             console.error("❌ Error retrieving file:", err.message);
             return;
@@ -85,31 +129,58 @@ function openFile(id) {
             return;
         }
 
-        // فتح الملف باستخدام التطبيق الافتراضي
-        exec(`"${row.archived_path}"`, (err) => {
-            if (err) {
-                console.error("❌ Error opening file:", err);
-            } else {
-                console.log("✅ File opened successfully.");
-            }
-        });
+        const encryptedFilePath = row.archived_path;
+        const fileName = path.basename(encryptedFilePath, ".enc");
+        const decryptedPath = path.join(archiveDir, fileName); // المسار لفك التشفير
+
+        const encryptionKey = Buffer.from(row.encryption_key, 'hex');
+        try {
+            const encryptedData = fs.readFileSync(encryptedFilePath);
+
+            // فك التشفير
+            const decipher = crypto.createDecipheriv("aes-256-cbc", encryptionKey, Buffer.alloc(16, 0));
+            const decryptedData = Buffer.concat([decipher.update(encryptedData), decipher.final()]);
+
+            fs.writeFileSync(decryptedPath, decryptedData);
+            console.log(`✅ File successfully decrypted: ${decryptedPath}`);
+
+            // فتح الملف
+            exec(`"${decryptedPath}"`, (err) => {
+                if (err) {
+                    console.error("❌ Error opening file:", err);
+                } else {
+                    console.log("✅ File opened successfully.");
+                    
+                    // بعد غلق الملف، نعيد تشفيره
+                    // ننتظر حتى يتم غلق الملف، ثم نقوم بإعادة تشفيره
+                    encryptFileAndArchive(decryptedPath, encryptedFilePath, encryptionKey);
+                }
+            });
+        } catch (err) {
+            console.error("❌ Error decrypting the file:", err);
+        }
     });
 }
 
-
-
-
-async function extractTextFromDocx(filePath) {
+// دالة لإعادة تشفير الملف
+function encryptFileAndArchive(decryptedPath, encryptedFilePath, encryptionKey) {
     try {
-        const { value: text } = await mammoth.extractRawText({ path: filePath });
-        return text;
-    } catch (error) {
-        console.error(`❌ Error reading DOCX file (${filePath}):`, error.message);
-        return "";
+        const fileData = fs.readFileSync(decryptedPath);
+
+        const cipher = crypto.createCipheriv("aes-256-cbc", encryptionKey, Buffer.alloc(16, 0));
+        const encryptedData = Buffer.concat([cipher.update(fileData), cipher.final()]);
+
+        // حفظ الملف المشفر مجددًا في الأرشيف
+        fs.writeFileSync(encryptedFilePath, encryptedData);
+        console.log(`✅ File successfully re-encrypted and archived: ${encryptedFilePath}`);
+
+        // حذف الملف المفكوك بعد التشفير
+        fs.unlinkSync(decryptedPath);
+        console.log(`✅ Deleted decrypted file: ${decryptedPath}`);
+    } catch (err) {
+        console.error("❌ Error encrypting the file for archiving:", err);
     }
 }
-
-
 
 
 
@@ -208,20 +279,26 @@ async function searchFiles() {
 // دالة لفتح متصفح الملفات
 
 
-// دالة لنقل الملف إلى الأرشيف
-async function archiveFile(filePath) {
-    const fileName = path.basename(filePath);
-    const archivePath = path.join(archiveDir, fileName);
-    const fileExtension = path.extname(fileName).slice(1); // استخراج الامتداد بدون النقطة
-    const fileSize = fs.statSync(filePath).size; // الحجم بالبايت
 
+export async function archiveFile(filePath) {
+    const fileName = path.basename(filePath);
+    const archivePath = path.join(archiveDir, fileName + ".enc");
+    const fileExtension = path.extname(fileName).slice(1);
+    const fileSize = fs.statSync(filePath).size;
+    
     try {
-        fs.renameSync(filePath, archivePath);
-        console.log(`✅ File successfully archived: ${archivePath}`);
+        const fileData = fs.readFileSync(filePath);
+        const cipher = crypto.createCipheriv("aes-256-cbc", encryptionKey, Buffer.alloc(16, 0));
+        const encryptedData = Buffer.concat([cipher.update(fileData), cipher.final()]);
+        
+        fs.writeFileSync(archivePath, encryptedData);
+        fs.unlinkSync(filePath); // حذف الملف الأصلي بعد التشفير
+
+        console.log(`✅ File successfully encrypted and archived: ${archivePath}`);
 
         db.run(
-            `INSERT INTO archived_files (file_name, file_extension, file_size, original_path, archived_path) VALUES (?, ?, ?, ?, ?)`,
-            [fileName, fileExtension, fileSize, filePath, archivePath],
+            `INSERT INTO archived_files (file_name, file_extension, file_size, original_path, archived_path, encryption_key, encrypted_data) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [fileName, fileExtension, fileSize, filePath, archivePath, encryptionKey.toString("hex"), encryptedData.toString("hex")],
             function (err) {
                 if (err) {
                     console.error("❌ Error saving record to database:", err.message);
@@ -231,10 +308,9 @@ async function archiveFile(filePath) {
             }
         );
     } catch (err) {
-        console.error("❌ Error moving the file:", err);
+        console.error("❌ Error encrypting or moving the file:", err);
     }
 }
-
 
 
 // دالة لعرض الملفات المؤرشفة في جدول
@@ -364,35 +440,119 @@ async function deleteFile(id) {
 
 
 
-// طباعة العنوان الكبير
 function printTitle() {
     console.clear();
-   console.log(
-    gradient.pastel.multiline(
-        figlet.textSync("File Manager", { 
-            font: "Big",
-            horizontalLayout: "full",
-            verticalLayout: "default"
-        })
+    
+    console.log(
+        gradient.pastel.multiline(
+            figlet.textSync("File Manager", { 
+                font: "Big",
+                horizontalLayout: "full",
+                verticalLayout: "default"
+            })
         )
     );
 
     console.log(
-        boxen(chalk.bold.white("📌 Welcome to the File Management System!"), { 
+        boxen(chalk.bold.white(" Welcome to the File Management System!"), { 
             padding: 1,  
-            margin: 1,  
-            backgroundColor: "black", // جعل الخلفية سوداء
-            font: "Big",
+            margin: .5,  
+            backgroundColor: "black",
             borderStyle: "bold", 
             borderColor: "cyan", 
             align: "center"
         })
     );
-console.log(
-    chalk.underline(
-        gradient(['#FF4500', '#FFA500', '#FFFF00'])("🎨 Designed by Ahmed Amer\n")
-    )
-);
+
+    // جلب الوقت والتاريخ الحالي
+    const now = new Date();
+    const formattedTime = now.toLocaleTimeString('en-GB'); // HH:mm:ss
+    const formattedDate = now.toLocaleDateString('en-GB'); // DD/MM/YYYY
+    const timeAndDate = ` ${formattedTime}  ${formattedDate}`;
+
+    // جلب الإحصائيات من الأرشيف
+    const archiveStats = getArchiveStats();
+    let statsMessage = "";
+
+    if (archiveStats) {
+        statsMessage = ` Total: ${archiveStats.total} | PDF: ${archiveStats.types.pdf} | DOCX: ${archiveStats.types.docx} | TXT: ${archiveStats.types.txt} | Excel: ${archiveStats.types.xlsx + archiveStats.types.xls} | Images: ${archiveStats.types.jpg + archiveStats.types.jpeg} | Other: ${archiveStats.types.other}`;
+    } else {
+        statsMessage = " No files found in archive.";
+    }
+
+    // طباعة الإحصائيات بجانب التاريخ والوقت
+    console.log(
+        boxen(
+            chalk.bold.yellow(`${statsMessage} | ${timeAndDate}`), {
+                padding: .5,
+                margin: 1,
+                backgroundColor: "black",
+                borderStyle: "bold",
+                borderColor: "cyan",
+                align: "center"
+            }
+        )
+    );
+
+    console.log(
+        chalk.underline(
+            gradient(['#FF4500', '#FFA500', '#FFFF00'])(" Designed by Ahmed Amer\n")
+        )
+    );
+}
+
+
+// مسار مجلد الأرشيف
+const archiveDirectory = path.resolve(__dirname, 'archive');  // استبدل هذا بمسار مجلد الأرشيف الفعلي لديك
+
+// دالة لإحضار إحصائيات الأرشيف
+function getArchiveStats() {
+    const archiveFiles = getArchiveFiles(); // جلب الملفات من الأرشيف
+    if (archiveFiles.length === 0) {
+        return null;
+    }
+
+    // تصنيف الملفات حسب النوع
+    const fileTypes = {
+        pdf: 0,
+        docx: 0,
+        txt: 0,
+        xlsx: 0,
+        xls: 0,
+        jpg: 0,
+        jpeg: 0,
+        other: 0
+    };
+
+    // تصنيف الملفات حسب النوع
+    archiveFiles.forEach(file => {
+        const ext = path.extname(file).toLowerCase();
+        if (ext === '.pdf') fileTypes.pdf++;
+        else if (ext === '.docx') fileTypes.docx++;
+        else if (ext === '.txt') fileTypes.txt++;
+        else if (ext === '.xlsx') fileTypes.xlsx++;
+        else if (ext === '.xls') fileTypes.xls++;
+        else if (ext === '.jpg') fileTypes.jpg++;
+        else if (ext === '.jpeg') fileTypes.jpeg++;
+        else fileTypes.other++;
+    });
+
+    return {
+        total: archiveFiles.length,
+        types: fileTypes
+    };
+}
+
+// دالة لإحضار الملفات من الأرشيف
+function getArchiveFiles() {
+    try {
+        // قراءة الملفات من مجلد الأرشيف
+        const files = fs.readdirSync(archiveDirectory);
+        return files.filter(file => fs.statSync(path.join(archiveDirectory, file)).isFile());
+    } catch (err) {
+        console.error(chalk.red('Error reading archive directory:', err));
+        return [];
+    }
 }
 
 
