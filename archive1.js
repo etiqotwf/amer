@@ -45,14 +45,11 @@ const dbPath = path.join(__dirname, 'archive.db');
 // التأكد من وجود قاعدة البيانات قبل محاولة حذفها
 const dbExists = fs.existsSync(dbPath);
 
+// فتح قاعدة البيانات
 const db = new sqlite3.Database(dbPath, (err) => {
-    if (err) {
-        console.error("❌ Error opening database:", err.message);
-        return;
-    }
+    if (err) return;
 
-    console.log("✅ Database opened successfully.");
-
+    // إنشاء الجدول إذا لم يكن موجودًا
     const createTableQuery = `
         CREATE TABLE IF NOT EXISTS archived_files (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,59 +58,174 @@ const db = new sqlite3.Database(dbPath, (err) => {
             file_size INTEGER NOT NULL,
             original_path TEXT NOT NULL,
             archived_path TEXT NOT NULL,
-            archived_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            encryption_key TEXT,  
-            encrypted_data BLOB  
+            archived_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `;
 
     db.run(createTableQuery, (err) => {
-        if (err) {
-            console.error("❌ Error creating table:", err.message);
-            return;
-        }
+        if (err) return;
 
-        console.log("✅ Table 'archived_files' created successfully.");
+        // التحقق من وجود الأعمدة encryption_key و encrypted_data
+        db.all("PRAGMA table_info(archived_files);", (err, rows) => {
+            if (err) return;
 
-        // التحقق من وجود سجلات
-        db.get(`SELECT COUNT(*) AS count FROM archived_files`, (err, row) => {
-            if (err) {
-                console.error("❌ Error checking records:", err.message);
-                return;
-            }
-
-            if (row.count > 0) {
-                console.log(`🔍 Database contains ${row.count} records. Skipping deletion.`);
-            } else if (dbExists) {
-                console.log("🗑️ No records found. Deleting all entries...");
-
-                db.run(`DELETE FROM archived_files`, (err) => {
-                    if (err) {
-                        console.error("❌ Error deleting records:", err.message);
-                        return;
-                    }
-                    console.log("✅ All records deleted.");
-
-                    // إعادة تعيين العداد AUTOINCREMENT
-                    db.run(`DELETE FROM sqlite_sequence WHERE name='archived_files'`, (err) => {
-                        if (err) {
-                            console.error("❌ Error resetting AUTOINCREMENT:", err.message);
-                        } else {
-                            console.log("✅ AUTOINCREMENT reset successfully.");
-                        }
-                    });
+            const columns = rows.map(row => row.name);
+            if (!columns.includes("encryption_key")) {
+                db.run("ALTER TABLE archived_files ADD COLUMN encryption_key TEXT;", (err) => {
+                    if (err) return;
                 });
             }
+
+            if (!columns.includes("encrypted_data")) {
+                db.run("ALTER TABLE archived_files ADD COLUMN encrypted_data BLOB;", (err) => {
+                    if (err) return;
+                });
+            }
+
+            // التحقق من وجود سجلات
+            db.get(`SELECT COUNT(*) AS count FROM archived_files`, (err, row) => {
+                if (err) return;
+
+                if (row.count > 0) {
+                    return;
+                } else if (dbExists) {
+                    db.run(`DELETE FROM archived_files`, (err) => {
+                        if (err) return;
+
+                        // إعادة تعيين العداد AUTOINCREMENT
+                        db.run(`DELETE FROM sqlite_sequence WHERE name='archived_files'`, (err) => {
+                            if (err) return;
+                        });
+                    });
+                }
+            });
         });
     });
 });
+
 // إنشاء مجلد الأرشيف إذا لم يكن موجودًا
 const archiveDir = path.join(__dirname, 'archive');
-console.log(`Archive directory: ${archiveDir}`); // طباعة المسار للتأكد
+
 if (!fs.existsSync(archiveDir)) {
     fs.mkdirSync(archiveDir);
-    console.log(`✅ Created directory: ${archiveDir}`);
 }
+
+
+// دالة لفتح قاعدة البيانات والتحقق من وجود الأعمدة وإنشاء الجدول
+function manageDatabase() {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const dbPath = path.join(__dirname, 'archive.db');
+
+    // التأكد من وجود قاعدة البيانات قبل محاولة حذفها
+    const dbExists = fs.existsSync(dbPath);
+
+    // فتح قاعدة البيانات
+    const db = new sqlite3.Database(dbPath, (err) => {
+        if (err) {
+            console.error("❌ Error opening database:", err.message);
+            return;
+        }
+
+        console.log("✅ Database opened successfully.");
+
+        // إنشاء الجدول إذا لم يكن موجودًا
+        const createTableQuery = `
+            CREATE TABLE IF NOT EXISTS archived_files (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_name TEXT NOT NULL,
+                file_extension TEXT NOT NULL,
+                file_size INTEGER NOT NULL,
+                original_path TEXT NOT NULL,
+                archived_path TEXT NOT NULL,
+                archived_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `;
+
+        db.run(createTableQuery, (err) => {
+            if (err) {
+                console.error("❌ Error creating table:", err.message);
+                return;
+            }
+
+            console.log("✅ Table 'archived_files' checked/created successfully.");
+
+            // التحقق من وجود الأعمدة encryption_key و encrypted_data
+            db.all("PRAGMA table_info(archived_files);", (err, rows) => {
+                if (err) {
+                    console.error("❌ Error checking table schema:", err.message);
+                    return;
+                }
+
+                const columns = rows.map(row => row.name);
+                if (!columns.includes("encryption_key")) {
+                    db.run("ALTER TABLE archived_files ADD COLUMN encryption_key TEXT;", (err) => {
+                        if (err) {
+                            console.error("❌ Error adding encryption_key column:", err.message);
+                        } else {
+                            console.log("✅ encryption_key column added successfully.");
+                        }
+                    });
+                }
+
+                if (!columns.includes("encrypted_data")) {
+                    db.run("ALTER TABLE archived_files ADD COLUMN encrypted_data BLOB;", (err) => {
+                        if (err) {
+                            console.error("❌ Error adding encrypted_data column:", err.message);
+                        } else {
+                            console.log("✅ encrypted_data column added successfully.");
+                        }
+                    });
+                }
+
+                // حذف جميع السجلات مباشرة بدون التحقق من عددها
+                if (dbExists) {
+                    console.log("🗑️ Deleting all entries...");
+
+                    db.run(`DELETE FROM archived_files`, (err) => {
+                        if (err) {
+                            console.error("❌ Error deleting records:", err.message);
+                            return;
+                        }
+                        console.log("✅ All records deleted.");
+
+                        // إعادة تعيين العداد AUTOINCREMENT
+                        db.run(`DELETE FROM sqlite_sequence WHERE name='archived_files'`, (err) => {
+                            if (err) {
+                                console.error("❌ Error resetting AUTOINCREMENT:", err.message);
+                            } else {
+                                console.log("✅ AUTOINCREMENT reset successfully.");
+                            }
+                        });
+
+                        // حذف مجلد الأرشيف بعد حذف البيانات
+                        const archiveDir = path.join(__dirname, 'archive');
+                        if (fs.existsSync(archiveDir)) {
+                            fs.rmSync(archiveDir, { recursive: true, force: true });
+                            console.log(`✅ Deleted archive directory: ${archiveDir}`);
+                        }
+                    });
+                }
+            });
+        });
+    });
+
+    // إنشاء مجلد الأرشيف إذا لم يكن موجودًا
+    const archiveDir = path.join(__dirname, 'archive');
+    console.log(`📂 Archive directory: ${archiveDir}`);
+
+    if (!fs.existsSync(archiveDir)) {
+        fs.mkdirSync(archiveDir);
+        console.log(`✅ Created directory: ${archiveDir}`);
+    }
+    
+    requestPassword();
+     mainMenu();
+
+
+}
+
+
 
 
 
@@ -661,6 +773,7 @@ async function mainMenu() {
                     { key: "R", name: "\x1b[1m\x1b[35m[7] [R] Restore a file\x1b[0m", value: "restore" },
                     { key: "X", name: "\x1b[1m\x1b[38;5;220m[8] [X] Delete a file\x1b[0m", value: "delete" },
                     { key: "B", name: "\x1b[1m\x1b[38;5;203m[9] [B] Backup the archive folder\x1b[0m", value: "backup" },
+                    { key: "DB", name: "\x1b[1m\x1b[38;5;202m[10] [DB] Restore database\x1b[0m", value: "restoreDatabase" }, // إضافة هذا الخيار
                     { key: "E", name: "\x1b[1m\x1b[37m[x] [E] Exit\x1b[0m", value: "exit" }
                 ],
                 pageSize: 10,
@@ -670,7 +783,7 @@ async function mainMenu() {
             },
         ]);
 
-        // Adding functionality for each action
+        // إضافة الوظائف المختلفة
         if (action === "archive") {
             await openFilePicker(archiveFile);
         } else if (action === "list") {
@@ -725,16 +838,27 @@ async function mainMenu() {
                     console.error(chalk.red(`Error creating backup: ${error.message}`));
                 }
             }
+        } else if (action === "restoreDatabase") { // هنا تحققنا من الخيار الجديد
+            const { restoreDb } = await inquirer.prompt([{
+                type: 'confirm',
+                name: 'restoreDb',
+                message: 'Do you want to restore the database? (yes/no)',
+                default: false,
+            }]);
+
+            if (restoreDb) {
+                console.log(chalk.yellow("Restoring the database..."));
+                manageDatabase(); // استدعاء الدالة manageDatabase هنا
+            }
         } else {
             console.log(chalk.magenta("\n👋 Exiting... Have a great day!\n"));
             process.exit();
         }
 
-        // No clearing the terminal here, just showing messages as usual.
+        // لا يوجد مسح للشاشة هنا، فقط نعرض الرسائل كما هي.
         console.log(chalk.blue('Returning to the main menu...'));
     }
 }
-
 
 
 
