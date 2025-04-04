@@ -22,6 +22,9 @@ import { c } from 'tar';
 
 import crypto from 'crypto';
 
+const tempDir = "temp"; // مجلد مؤقت لفك تشفير الملفات
+
+
 const encryptionKey = crypto.randomBytes(32); // يجب حفظ هذا المفتاح لاسترجاع الملفات لاحقًا
 
 
@@ -328,7 +331,7 @@ async function searchFiles() {
         }
 
         let resultsText = `=======================================\n`;
-        resultsText += `📂 🔍 Search Results\n`;
+        resultsText += `📂 🔍 Search Results (${new Date().toLocaleString("en-US")}) - Total: ${rows.length} files\n`;
         resultsText += `=======================================\n\n`;
 
         const table = new cliTable({
@@ -360,12 +363,12 @@ async function searchFiles() {
 
         console.log(table.toString());
 
-        // Save results to a text file
+        // حفظ النتائج في ملف
         const fileName = "search_results.txt";
         fs.writeFileSync(fileName, resultsText, "utf8");
         console.log(chalk.blue(`📂 Search results saved in: ${fileName}`));
 
-        // Ask if the user wants to open the file
+        // عرض خيار فتح الملف
         const { openFile } = await inquirer.prompt([
             {
                 type: "confirm",
@@ -480,8 +483,8 @@ async function listArchivedFiles() {
 
 
 // دالة لحذف ملف من الأرشيف وإعادته إلى مساره الأصلي
-function restoreFile(id) {
-    db.get("SELECT * FROM archived_files WHERE id = ?", [id], (err, row) => {
+async function restoreFile(id) {
+    db.get("SELECT * FROM archived_files WHERE id = ?", [id], async (err, row) => {
         if (err) {
             console.error("❌ Error retrieving file:", err.message);
             return;
@@ -492,13 +495,23 @@ function restoreFile(id) {
             return;
         }
 
+        const encryptedPath = row.archived_path;  // المسار المشفر
+        const originalPath = row.original_path;  // المسار الأصلي للملف
+        const encryptionKey = Buffer.from(row.encryption_key, 'hex'); // مفتاح التشفير
+
         try {
-            fs.renameSync(row.archived_path, row.original_path);
+            // فك التشفير إلى المسار الأصلي
+            await decryptFile(encryptedPath, originalPath, encryptionKey);
+
+            // حذف الملف المشفر بعد نجاح فك التشفير
+            fs.unlinkSync(encryptedPath);
+
+            // حذف السجل من قاعدة البيانات
             db.run("DELETE FROM archived_files WHERE id = ?", [id], (err) => {
                 if (err) {
                     console.error("❌ Error deleting record:", err.message);
                 } else {
-                    console.log(`✅ File restored successfully: ${row.original_path}`);
+                    console.log(`✅ File restored successfully and decrypted: ${originalPath}`);
                 }
             });
         } catch (err) {
@@ -506,6 +519,7 @@ function restoreFile(id) {
         }
     });
 }
+
 
 // دالة لحذف ملف نهائيًا من الأرشيف وقاعدة البيانات
 async function deleteFile(id) {
@@ -613,7 +627,6 @@ function printTitle() {
     );
 }
 
-
 // مسار مجلد الأرشيف
 const archiveDirectory = path.resolve(__dirname, 'archive');  // استبدل هذا بمسار مجلد الأرشيف الفعلي لديك
 
@@ -638,7 +651,10 @@ function getArchiveStats() {
 
     // تصنيف الملفات حسب النوع
     archiveFiles.forEach(file => {
-        const ext = path.extname(file).toLowerCase();
+        // إزالة وسم 'enc' إن وجد
+        const originalName = file.replace(/\.enc$/, '');  
+        const ext = path.extname(originalName).toLowerCase();
+
         if (ext === '.pdf') fileTypes.pdf++;
         else if (ext === '.docx') fileTypes.docx++;
         else if (ext === '.txt') fileTypes.txt++;
@@ -923,56 +939,135 @@ async function openFilePicker(callback) {
 
 
 
+async function extractTextFromFile(filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+    let text = "";
+
+    try {
+        if (ext === ".docx") {
+            const { value } = await mammoth.extractRawText({ path: filePath });
+            text = value.toLowerCase();
+        } else if (ext === ".xlsx") {
+            const workbook = xlsx.readFile(filePath);
+            const sheetNames = workbook.SheetNames;
+            sheetNames.forEach(sheet => {
+                const sheetData = xlsx.utils.sheet_to_json(workbook.Sheets[sheet], { header: 1 });
+                text += sheetData.flat().join(" ").toLowerCase() + " ";
+            });
+        } else if ([".jpg", ".jpeg", ".png"].includes(ext)) {
+            const { data: { text: ocrText } } = await recognize(filePath);
+            text = ocrText.toLowerCase();
+        } else {
+            console.warn(`⚠️ Unsupported file type: ${filePath}`);
+        }
+    } catch (error) {
+        console.error(`❌ Error processing file ${filePath}:`, error.message);
+    }
+
+    return text;
+}
+
+
+
+if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir); // إنشاء مجلد مؤقت إذا لم يكن موجودًا
 
 async function searchInsideFile() {
-    const { keywords } = await inquirer.prompt([
-        { type: "input", name: "keywords", message: chalk.cyan("🔍 Enter keywords (comma-separated):") }
-    ]);
+    try {
+        const { keywords } = await inquirer.prompt([
+            { type: 'input', name: 'keywords', message: chalk.cyan('🔍 Enter keywords (comma-separated):') }
+        ]);
 
-    const keywordsArray = keywords.split(",").map(k => k.trim().toLowerCase()); // تقسيم الكلمات وتحويلها إلى lowercase
+        const keywordsArray = keywords.split(',').map(k => k.trim().toLowerCase()); // تحويل الكلمات إلى lowercase
 
-    if (!fs.existsSync(archiveDir)) {
-        console.error(chalk.red(`❌ The directory "${archiveDir}" does not exist.`));
-        return;
-    }
+        let foundFiles = [];
 
-    const files = fs.readdirSync(archiveDir).filter(file => file.endsWith(".docx") || file.endsWith(".xlsx"));
-    let foundFiles = [];
+        const files = await getEncryptedFiles(); // جلب الملفات المشفرة من قاعدة البيانات
 
-    for (const file of files) {
-        const filePath = path.join(archiveDir, file);
-        try {
-            let text = "";
+        for (const { id, encryptedFilePath, encryptionKey, originalFileName } of files) {
+            const decryptedPath = path.join('archive', originalFileName); // استبدال temp بـ archive
 
-            if (file.endsWith(".docx")) {
-                const { value } = await mammoth.extractRawText({ path: filePath });
-                text = value.toLowerCase();
-            } else if (file.endsWith(".xlsx")) {
-                const workbook = xlsx.readFile(filePath);
-                const sheetNames = workbook.SheetNames;
-                sheetNames.forEach(sheet => {
-                    const sheetData = xlsx.utils.sheet_to_json(workbook.Sheets[sheet], { header: 1 });
-                    text += sheetData.flat().join(" ").toLowerCase() + " ";
-                });
+            try {
+                await decryptFile(encryptedFilePath, decryptedPath, encryptionKey); // فك التشفير
+
+                // ✅ تخطي الصور تلقائيًا
+                if (/\.(jpg|jpeg|png|gif|bmp)$/i.test(originalFileName)) {
+                    continue; // لا تحاول استخراج النص من الصور
+                }
+
+                let text = "";
+                try {
+                    text = await extractTextFromFile(decryptedPath); 
+                    text = text.toLowerCase();
+                } catch (error) {
+                    continue; // تجاهل أي خطأ وعدم طباعة شيء
+                }
+
+                // التحقق مما إذا كانت جميع الكلمات موجودة
+                const allKeywordsFound = keywordsArray.every(keyword => text.includes(keyword));
+
+                if (allKeywordsFound) {
+                    console.log(chalk.green(`✅ Keywords found in: ${originalFileName}`));
+                    foundFiles.push(originalFileName);
+
+                    // عرض تفاصيل إضافية للملف
+                    const stats = fs.statSync(decryptedPath); // الحصول على بيانات الملف
+                    const fileSize = (stats.size / 1024).toFixed(2); // الحجم بالـ KB
+                    const folderPath = path.dirname(decryptedPath); // المسار الأصلي للفولدر
+
+                    // عرض التفاصيل بجانب بعضها
+                    console.log(chalk.cyan(`--- File Details ---`));
+                    console.log(chalk.yellow(`ID: ${id}  |  Name: ${originalFileName}  |  Folder: ${folderPath}  |  Size: ${fileSize} KB`));
+                    console.log(chalk.cyan(`--------------------`));
+                }
+            } catch (error) {
+                // تجاهل الأخطاء
+            } finally {
+                // حذف النسخة المفكوك تشفيرها بعد البحث لضمان الأمان
+                if (fs.existsSync(decryptedPath)) {
+                    fs.unlinkSync(decryptedPath);
+                }
             }
-
-            // التحقق من أن جميع الكلمات موجودة داخل النص بأي ترتيب
-            const allKeywordsFound = keywordsArray.every(keyword => text.includes(keyword));
-
-            if (allKeywordsFound) {
-                console.log(chalk.green(`✅ Keywords found in: ${filePath}`));
-                foundFiles.push(filePath);
-            }
-        } catch (error) {
-            console.error(chalk.red(`❌ Error reading file ${file}:`), error.message);
         }
-    }
 
-    if (foundFiles.length > 0) {
-        console.log(chalk.blue(`📂 Opening ${foundFiles.length} matching files...`));
-        foundFiles.forEach(file => exec(`"${file}"`)); // فتح جميع الملفات المطابقة
-    } else {
-        console.log(chalk.red(`❌ No matches found for the given keywords.`));
+        if (foundFiles.length === 0) {
+            console.log(chalk.red('❌ No matches found for the given keywords.'));
+        }
+    } catch (error) {
+        console.error(chalk.red("❌ Error:"), error.message);
+    }
+}
+
+
+// 🔹 دالة لجلب الملفات المشفرة من قاعدة البيانات
+function getEncryptedFiles() {
+    return new Promise((resolve, reject) => {
+        db.all("SELECT id, archived_path, encryption_key FROM archived_files", [], (err, rows) => {
+            if (err) {
+                reject(err);
+            } else {
+                const files = rows.map(row => ({
+                    id: row.id,  // إضافة الـ ID
+                    encryptedFilePath: row.archived_path,
+                    encryptionKey: Buffer.from(row.encryption_key, 'hex'),
+                    originalFileName: path.basename(row.archived_path, ".enc")
+                }));
+                resolve(files);
+            }
+        });
+    });
+}
+
+
+// 🔹 دالة لفك تشفير الملفات مؤقتًا للبحث فيها
+function decryptFile(encryptedFilePath, decryptedPath, encryptionKey) {
+    try {
+        const encryptedData = fs.readFileSync(encryptedFilePath);
+        const decipher = crypto.createDecipheriv("aes-256-cbc", encryptionKey, Buffer.alloc(16, 0));
+        const decryptedData = Buffer.concat([decipher.update(encryptedData), decipher.final()]);
+
+        fs.writeFileSync(decryptedPath, decryptedData);
+    } catch (err) {
+        throw err; // لن نطبع أي شيء عند حدوث خطأ
     }
 }
 
