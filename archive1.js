@@ -20,6 +20,7 @@ import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib'; // تستخدم لتحويل الصور إلى PDF
 import { c } from 'tar';
 
+
 import crypto from 'crypto';
 
 const tempDir = "temp"; // مجلد مؤقت لفك تشفير الملفات
@@ -222,55 +223,65 @@ function manageDatabase() {
         console.log(`✅ Created directory: ${archiveDir}`);
     }
     
-    requestPassword();
-     mainMenu();
-
 
 }
 
 
 
 
-
 function openFile(id) {
     db.get("SELECT archived_path, encryption_key FROM archived_files WHERE id = ?", [id], (err, row) => {
-        if (err) {
-            console.error("❌ Error retrieving file:", err.message);
-            return;
-        }
-
-        if (!row) {
-            console.log("❌ File not found.");
-            return;
-        }
+        if (err) return console.error("❌ Error retrieving file:", err.message);
+        if (!row) return console.log("❌ File not found.");
 
         const encryptedFilePath = row.archived_path;
         const fileName = path.basename(encryptedFilePath, ".enc");
-        const decryptedPath = path.join(archiveDir, fileName); // المسار لفك التشفير
-
+        const decryptedPath = path.join(archiveDir, fileName);
         const encryptionKey = Buffer.from(row.encryption_key, 'hex');
+
         try {
             const encryptedData = fs.readFileSync(encryptedFilePath);
-
-            // فك التشفير
             const decipher = crypto.createDecipheriv("aes-256-cbc", encryptionKey, Buffer.alloc(16, 0));
             const decryptedData = Buffer.concat([decipher.update(encryptedData), decipher.final()]);
-
             fs.writeFileSync(decryptedPath, decryptedData);
+
             console.log(`✅ File successfully decrypted: ${decryptedPath}`);
 
             // فتح الملف
-            exec(`"${decryptedPath}"`, (err) => {
-                if (err) {
-                    console.error("❌ Error opening file:", err);
-                } else {
-                    console.log("✅ File opened successfully.");
-                    
-                    // بعد غلق الملف، نعيد تشفيره
-                    // ننتظر حتى يتم غلق الملف، ثم نقوم بإعادة تشفيره
+            const child = exec(`"${decryptedPath}"`);
+            const fileExt = path.extname(decryptedPath).toLowerCase();
+
+            const attemptReEncryption = () => {
+                try {
+                    fs.unlinkSync(decryptedPath); // تجربة لحذف الملف
+                    // لو مفيش خطأ، الملف مفتوحش – نبدأ التشفير
+                    fs.writeFileSync(decryptedPath, decryptedData); // نرجع الملف علشان نشفره
                     encryptFileAndArchive(decryptedPath, encryptedFilePath, encryptionKey);
+                } catch (err) {
+                    if (err.code === 'EBUSY') {
+                        //console.log("🔄 File still in use... retrying in 3 seconds...");
+                        setTimeout(attemptReEncryption, 30000); // إعادة المحاولة بعد 3 ثواني
+                    } else {
+                        console.error("❌ Unexpected error during check:", err);
+                    }
                 }
-            });
+            };
+
+            if ([".docx", ".xlsx", ".xls", ".pptx", ".txt"].includes(fileExt)) {
+                // لما المستخدم يقفل البرنامج، نبدأ نحاول نعيد التشفير
+                child.on('exit', () => {
+                    console.log("📁 Office app closed. Checking if file is ready...");
+                    setTimeout(attemptReEncryption, 30000);
+                });
+            } else {
+                // ملفات PDF أو صور
+                const WAIT_TIME = 60 * 1000;
+                console.log(`🕒 Waiting ${WAIT_TIME / 1000} seconds before re-encryption for: ${fileExt}`);
+                setTimeout(() => {
+                    encryptFileAndArchive(decryptedPath, encryptedFilePath, encryptionKey);
+                }, WAIT_TIME);
+            }
+
         } catch (err) {
             console.error("❌ Error decrypting the file:", err);
         }
@@ -983,15 +994,19 @@ async function searchInsideFile() {
 
         const files = await getEncryptedFiles(); // جلب الملفات المشفرة من قاعدة البيانات
 
+        let resultsText = `=======================================\n`;
+        resultsText += `📂 🔍 Search Results (${new Date().toLocaleString("en-US")})\n`;
+        resultsText += `=======================================\n\n`;
+
         for (const { id, encryptedFilePath, encryptionKey, originalFileName } of files) {
             const decryptedPath = path.join('archive', originalFileName); // استبدال temp بـ archive
 
             try {
                 await decryptFile(encryptedFilePath, decryptedPath, encryptionKey); // فك التشفير
 
-                // ✅ تخطي الصور تلقائيًا
-                if (/\.(jpg|jpeg|png|gif|bmp)$/i.test(originalFileName)) {
-                    continue; // لا تحاول استخراج النص من الصور
+                // ✅ تخطي الملفات غير المدعومة (غير Word أو Excel)
+                if (!/\.(docx|xlsx)$/i.test(originalFileName)) {
+                    continue; // لا تحاول استخراج النص من الملفات غير المدعومة
                 }
 
                 let text = "";
@@ -1006,18 +1021,31 @@ async function searchInsideFile() {
                 const allKeywordsFound = keywordsArray.every(keyword => text.includes(keyword));
 
                 if (allKeywordsFound) {
-                    console.log(chalk.green(`✅ Keywords found in: ${originalFileName}`));
                     foundFiles.push(originalFileName);
-
-                    // عرض تفاصيل إضافية للملف
                     const stats = fs.statSync(decryptedPath); // الحصول على بيانات الملف
                     const fileSize = (stats.size / 1024).toFixed(2); // الحجم بالـ KB
                     const folderPath = path.dirname(decryptedPath); // المسار الأصلي للفولدر
 
-                    // عرض التفاصيل بجانب بعضها
-                    console.log(chalk.cyan(`--- File Details ---`));
-                    console.log(chalk.yellow(`ID: ${id}  |  Name: ${originalFileName}  |  Folder: ${folderPath}  |  Size: ${fileSize} KB`));
-                    console.log(chalk.cyan(`--------------------`));
+                    // أخذ أول 5 سطور من النص
+                    const firstFiveLines = text.split('\n').filter(line => line.trim() !== '').slice(0, 5).join('\n');
+
+                    // عرض التفاصيل بشكل احترافي في التيرمينال جنبًا إلى جنب
+                    console.log(chalk.white.bold(`---------------------------------------`)); // تعديل اللون إلى الأبيض
+                    console.log(chalk.bold.green(`✅ Keywords found in: ${originalFileName}`));
+                    console.log(chalk.bold.cyan(`--- File Details ---`));
+                    console.log(
+                        chalk.white.bold(`ID ${id}  |  (N) Name: ${originalFileName}  |  (E) Extension: ${path.extname(originalFileName)}  |  (S) Size: ${fileSize} KB  |  (F) Folder: ${folderPath}`)
+                    );
+                    console.log(chalk.white.bold(`---------------------------------------`)); // تعديل اللون إلى الأبيض
+                    
+                    // حفظ النتيجة (عرض أول 5 سطور من النص)
+                    resultsText += `🆔 ${id}\n`;
+                    resultsText += `📜 Name: ${originalFileName}\n`;
+                    resultsText += `🗂️ Extension: ${path.extname(originalFileName)}\n`;
+                    resultsText += `📏 Size: ${fileSize} KB\n`;
+                    resultsText += `📅 Folder: ${folderPath}\n`;
+                    resultsText += `📄 File Content:\n${text.split('\n').filter(line => line.trim() !== '').join(' | ') || 'No content to display.'}\n`;
+                    resultsText += `---------------------------------------\n`;
                 }
             } catch (error) {
                 // تجاهل الأخطاء
@@ -1030,12 +1058,37 @@ async function searchInsideFile() {
         }
 
         if (foundFiles.length === 0) {
-            console.log(chalk.red('❌ No matches found for the given keywords.'));
+            console.log(chalk.yellow('⚠️ No matching files found.'));
+        } else {
+            // حفظ النتائج في ملف
+            const fileName = 'search_results.txt';
+            fs.writeFileSync(fileName, resultsText, 'utf8');
+            console.log(chalk.blue(`📂 Search results saved in: ${fileName}`));
+
+            // عرض خيار فتح الملف مع التفاصيل
+            const { openFile } = await inquirer.prompt([
+                {
+                    type: 'confirm',
+                    name: 'openFile',
+                    message: chalk.cyan('📄 Do you want to open the search results file? Here are the details:'),
+                    default: false
+                }
+            ]);
+
+            if (openFile) {
+                exec(`"${fileName}"`, (err) => {
+                    if (err) {
+                        console.error(chalk.red(`❌ Error opening file: ${fileName}`));
+                    }
+                });
+            }
         }
     } catch (error) {
-        console.error(chalk.red("❌ Error:"), error.message);
+        console.error(chalk.red("❌ Error searching records:"), error.message);
     }
 }
+
+
 
 
 // 🔹 دالة لجلب الملفات المشفرة من قاعدة البيانات
